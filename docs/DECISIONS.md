@@ -18,5 +18,7 @@
 | D14 | Start Stage 0 read-only Xavier verification | Authorized to prepare and execute | User approval to begin on 25 Nov 2026 |
 | D15 | Host changes, long training, paid GPU spend, full HPC matrix, public release of weights/results/upstream-derived code | **Not authorized by this package** | Require separately recorded sign-off |
 | D16 | Source repository is public from day one (code, docs, redacted reports only) | Owner decision; recorded, pending Dr. Iyad acknowledgment | Anas, 25 Nov 2026; Stage 0 PR. Does not authorize release of weights, results or upstream-derived code (D12, D15) |
+| D17 | Internal OctreeNCA licensing decision deadline: 16 Dec 2026 (license/grant, extend, or clean-room) | **Proposed**, pending Dr. Iyad | Anas, PR #2 review, 25 Nov 2026 |
+| D18 | Separate Xavier development environment (JetPack 5.1.x, Python 3.8, CUDA 11.4) from a modern CUDA reference environment for upstream reproduction | **Proposed**, supported by Anas; pending Dr. Iyad | PR #2 review, 25 Nov 2026; `reports/stage_0.md` section 2.1 |
 
 Any changed scientific decision requires a new log row specifying date, requester, approving reviewer, rationale, affected protocol version and impact on published comparisons.

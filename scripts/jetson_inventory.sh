@@ -1,14 +1,19 @@
 #!/usr/bin/env bash
 # Stage 0: read-only inventory. No sudo, installs, network calls or host changes.
 #
-# Safety properties (enforced by tests/test_inventory_readonly.sh in CI):
+# Design intent (checked for regressions by tests/test_inventory_readonly.sh;
+# that test is a lint-style regression check, NOT a security sandbox and NOT a
+# guarantee of read-only execution - a human must still review this script):
 #   - never invokes sudo, package managers, pip install, nvpmodel -m,
 #     jetson_clocks (only checks whether it exists), systemctl, or any writer;
-#   - never prints hostname, usernames, IP/MAC addresses or home paths;
+#   - avoids printing hostname, usernames, IP/MAC addresses, device serials,
+#     mount sources, swap file paths and install paths (data minimization);
 #   - parses /etc/os-release instead of sourcing (executing) it;
 #   - the only GPU touch is an optional, already-installed torch import that
 #     creates and releases a CUDA context; no kernels are trained or benchmarked.
-# Output goes to stdout only. Review and redact before sharing.
+# Output goes to stdout only. MANDATORY: a human reviews and redacts the
+# output before it is shared or committed; minimization here does not
+# replace that review.
 set -u
 export LC_ALL=C
 
@@ -60,7 +65,10 @@ fi
 
 say 'Python and machine architecture'
 run_if_found python3 -c 'import sys, platform; print(sys.version.replace("\n", " ")); print("abi tag: cp%d%d" % sys.version_info[:2]); print("machine:", platform.machine())'
-run_if_found python3 -m pip --version
+if command -v python3 >/dev/null 2>&1; then
+  # Version only; `pip --version` would print the install path.
+  python3 -c 'import pip; print("pip:", pip.__version__)' 2>/dev/null || printf 'pip: not importable\n'
+fi
 for py in python3.9 python3.10 python3.11; do
   if command -v "$py" >/dev/null 2>&1; then printf '%s: present (%s)\n' "$py" "$("$py" --version 2>&1)"; fi
 done
@@ -74,15 +82,22 @@ elif [ -x /usr/local/cuda/bin/nvcc ]; then
 else
   printf 'nvcc not installed\n'
 fi
-for d in /usr/local/cuda*; do [ -e "$d" ] && printf 'cuda dir: %s\n' "$d"; done
+for d in /usr/local/cuda*; do [ -e "$d" ] && printf 'cuda dir: %s\n' "${d##*/}"; done
 
-say 'Memory and swap'
+say 'Memory and swap (totals only)'
 run_if_found free -h
-run_if_found swapon --show
+if command -v swapon >/dev/null 2>&1; then
+  # Type and size only; swap file/device names are omitted.
+  swapon --show=TYPE,SIZE,USED --noheadings 2>/dev/null || printf 'swap detail unavailable\n'
+fi
 
-say 'Storage'
-run_if_found df -h / /home
-run_if_found lsblk -d -o NAME,SIZE,TYPE,ROTA
+say 'Storage (capacity only)'
+# Sizes and mount points only; source devices, labels and serials are omitted.
+if df -h --output=size,used,avail,pcent,target / /home >/dev/null 2>&1; then
+  df -h --output=size,used,avail,pcent,target / /home | awk '!seen[$0]++'
+else
+  printf 'df capacity query unavailable\n'
+fi
 
 say 'Current power mode (query only)'
 if command -v nvpmodel >/dev/null 2>&1; then nvpmodel -q 2>&1 || printf 'nvpmodel query unavailable to current user\n'; else printf 'nvpmodel not installed\n'; fi

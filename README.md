@@ -20,7 +20,7 @@ This repository starter implements the **engineering contract and read-only Stag
 - A research governance and approvals log.
 - A ready-to-paste Claude Code Stage 0 handoff.
 - A read-only Jetson inventory script and stage report template.
-- A Git ignore policy (`.gitignore`) and a repository-policy CI workflow (`.github/workflows/research-contract.yml`) that runs ShellCheck, a no-data/no-secrets check and a read-only guard test for the inventory script on GitHub-hosted runners.
+- A Git ignore policy (`.gitignore`) and a repository-policy CI workflow (`.github/workflows/research-contract.yml`) that runs ShellCheck, a no-data/no-secrets policy check and regression tests on GitHub-hosted runners. The tests catch known mistakes; they are not a security sandbox.
 
 ## First action on Dr. Iyad's Xavier
 
@@ -32,7 +32,7 @@ This repository starter implements the **engineering contract and read-only Stag
    bash scripts/jetson_inventory.sh > stage0_inventory_local.log 2>&1   # git-ignored
    ```
 
-4. Review/redact the local inventory log before attaching it to `reports/stage_0.md`; verify matching NVIDIA Jetson ARM64 PyTorch support.
+4. A human reviews and redacts the local inventory log (hostnames, usernames, IP/MAC addresses, serials, home paths). Only then is a copy committed as `reports/evidence/stage0_inventory_redacted.txt`, starting with a line `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`; CI rejects evidence without it. The script minimizes what it prints, but that does not replace this review.
 5. Obtain approval before any installation, power-mode change, firmware update, external code import or long training job.
 
 ## Explicit non-approvals
@@ -56,7 +56,7 @@ This repository starter implements the **engineering contract and read-only Stag
 | `docs/UPSTREAM_LICENSE_REVIEW.md` | License verification template |
 | `scripts/jetson_inventory.sh` | Read-only system information collector |
 | `scripts/check_repo_policy.sh` | Public-repo policy check (no data, weights, secrets) |
-| `tests/` | Read-only guard and mutation tests for the inventory script |
+| `tests/` | Regression tests for the inventory script and the repository policy (not security guarantees) |
 | `reports/stage_0.md` | Stage 0 report (pending review) |
 | `reports/stage_0_TEMPLATE.md` | Stage 0 evidence format |
 

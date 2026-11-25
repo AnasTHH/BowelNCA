@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# Mutation test for tests/test_inventory_readonly.sh: injects forbidden
-# commands into a temporary copy of the inventory script and requires the
-# guard to reject every mutant WITHOUT executing it.
+# Mutation test for the regression check tests/test_inventory_readonly.sh:
+# injects known-forbidden commands into a temporary copy of the inventory
+# script and requires the check to reject every mutant WITHOUT executing it.
+# This measures the deny-list's coverage of known patterns only; it is not
+# evidence that the inventory script is safe against unknown mutations.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -20,6 +22,8 @@ mutants=(
   'curl -s https://example.invalid'
   'rm -rf /tmp/x'
   'systemctl restart nvpmodel'
+  'lsblk -o NAME,SERIAL'
+  'python3 -m pip --version'
 )
 fail=0
 for mutant in "${mutants[@]}"; do

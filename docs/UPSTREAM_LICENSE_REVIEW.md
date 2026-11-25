@@ -1,7 +1,8 @@
 # OctreeNCA reuse and publication license review
 
 **Status: UNRESOLVED. No license is granted by this file. Not legal advice.**
-Last updated: 25 Nov 2026 (Stage 0, issue #1).
+Last updated: 25 Nov 2026 (Stage 0, issue #1, review round 1).
+**Internal licensing decision deadline (proposed): 16 December 2026** (see `DECISIONS.md` D17).
 
 ## Findings at the pinned commit
 
@@ -14,7 +15,7 @@ Last updated: 25 Nov 2026 (Stage 0, issue #1).
 | Packaging metadata declaring a license | **None** (no `setup.py`/`pyproject.toml` with license; `nca_cuda_compile.py` has none) | Repository tree |
 | README license statement | **None**; README asks for citation only | README at the pinned commit |
 | GitHub API license field | Not retrievable from this environment (proxy 403); the tree itself contains no license file, so GitHub cannot detect one | |
-| Apparently vendored third-party code | `src/models/vit_seg_modeling*.py` and `vit_seg_configs.py` appear to derive from TransUNet (Apache-2.0) **without** the Apache NOTICE/attribution; unconfirmed | Function/class names (`np2th`, `swish`, `Attention`, `Embeddings`) match TransUNet; needs a line-level check |
+| Provenance of individual files | **Not assessed.** Some files implement baseline models that may have their own upstream origins and licenses; this review makes no finding about them | To be clarified with the authors in the license inquiry |
 | Related lab repositories | `MECLabTUDA/M3D-NCA` (predecessor, co-author J. Kalkhof) is **MIT**, commit `f53f164a8445820055c08a3d78efc911b80b5571`; `MECLabTUDA/Med-NCA` is MIT (`a844a72a1099db165d57f2d87bbcd5afd23586cb`) | Shallow clones, 25 Nov 2026. This does **not** license OctreeNCA, but suggests the lab normally permits open reuse, so a request is likely to succeed |
 
 ## What this means
@@ -33,13 +34,14 @@ With no license, the default is **all rights reserved** by the copyright holders
 
 ## Recommended resolution (ranked)
 
-1. **Ask the authors to add an OSI license to the repository** (ideally MIT, matching M3D-NCA). Contact: corresponding authors on arXiv:2508.06993 (Nick Lemke; Anirban Mukhopadhyay, MECLab, TU Darmstadt). Optionally also open a public GitHub issue on the upstream repository asking for a LICENSE file. This is the cleanest outcome and benefits everyone. Also ask them to confirm the TransUNet attribution.
+1. **Ask the authors to add an OSI license to the repository** (ideally MIT, matching M3D-NCA). Contact: the authors listed on arXiv:2508.06993 (MECLab, TU Darmstadt), using addresses from the paper or institutional pages, verified by the sender. This is the cleanest outcome and benefits everyone. Also ask whether any files carry separate third-party licenses. A draft inquiry exists outside the public repository and is sent only by the project owner.
 2. **Written permission** for this project (use, modification, publication of derived code and weights) if they won't add a license. Archive it privately and summarise it in `reports/license_review.md`.
-3. **Clean-room re-implementation** from the paper, if neither arrives within an agreed deadline (proposal: 3 weeks). Higher engineering cost, and reproduction fidelity to the published prostate Dice becomes harder to claim.
+3. **Clean-room re-implementation** from the paper, if neither a license nor a written grant is in hand by the **16 December 2026** decision point. Higher engineering cost, and reproduction fidelity to the published prostate Dice becomes harder to claim. Clean-room hygiene: the person writing the implementation must not read the upstream source.
 
 ## Still pending
 
-- Upstream author contact and inquiry date: **not yet sent** (owner action; it is an outward-facing message).
+- Upstream author contact and inquiry date: **drafted, not sent** (owner action; it is an outward-facing message).
+- Decision at 16 Dec 2026 (owner + Dr. Iyad): proceed with upstream under license/grant, extend the wait, or authorize clean-room re-implementation.
 - Institutional (UoN) review of internal use: **PENDING**.
 - Permission to distribute trained weights and derivative assets: **PENDING**.
 - Evidence/response archived privately: **PENDING**.
