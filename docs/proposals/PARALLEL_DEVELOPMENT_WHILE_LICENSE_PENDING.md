@@ -1,6 +1,6 @@
 # Proposal: architecture-independent development while the OctreeNCA license is pending
 
-**Status: PROPOSAL ONLY. Not authorized and not executed.** It needs Dr. Iyad's approval because it starts parts of Stage 2 engineering before Stages 0 and 1 have closed.
+**Status: PROPOSAL ONLY. Not authorized and not executed** (decision D19, pending Dr. Iyad). Anas supports it (re-review, 25 Nov 2026), with initial priority **P1, P2, P4, P7, P8**, **synthetic data only and CPU only**, subject to scientific approval. It needs Dr. Iyad's approval because it starts parts of Stage 2 engineering before Stages 0 and 1 have closed.
 **Date:** 25 Nov 2026 · **Plan:** `docs/DEVELOPMENT_PLAN_v1.2.md` · **Related:** D12, D17, D18, issue #1
 
 ## 1. Problem
@@ -48,4 +48,4 @@ Total is about 15-20 engineering days, delivered as 6-9 PRs, each with its own i
 
 ## 5. Decision requested
 
-Approve or reject starting P1-P9 (or a named subset, e.g. P1, P2, P4, P7 first) before Stage 1, under the constraints above. If approved, each package gets its own issue and branch, and nothing touches the Xavier or real data.
+Approve or reject starting the initial priority set **P1 (synthetic fixtures), P2 (label mapping), P4 (inverse mapping and metrics), P7 (split tooling) and P8 (run manifest)** before Stage 1, under the constraints above (synthetic data only, CPU only). P3, P5, P6 and P9 would follow in a later, separately approved tranche. The initial set is about 5.5-8.5 engineering days by the estimates in section 2. If approved, each package gets its own issue and branch, and nothing touches the Xavier or real data.

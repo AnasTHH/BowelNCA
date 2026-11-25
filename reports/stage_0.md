@@ -6,7 +6,7 @@
 **Git commit:** head of PR branch for issue #1 (see PR)
 **Plan version:** `docs/DEVELOPMENT_PLAN_v1.2.md`
 **Status:** **Draft, PARTIAL - Stage 0 INCOMPLETE.** On-device inventory **not collected** (blocker B1). No stage approved by this report.
-**Revision:** 2 (addresses independent review of `f0f2eef`, REQUEST CHANGES items 1-6).
+**Revision:** 3 (round 1 REQUEST CHANGES on `f0f2eef` addressed; round 2 re-review of `878197a`: technical GO for preparatory repository changes, subject to Dr. Iyad's merge authorization).
 
 ## 0. Summary for the reviewer
 
@@ -14,10 +14,10 @@
 |---|---|
 | Repository audit | Done. README claimed a `.gitignore` and CI that did not exist; both added. Public-visibility wording corrected. |
 | Inventory script | Reviewed by hand as read-only and hardened. Output minimized (no install paths, device names or swap paths). A CI **regression test** catches known-dangerous commands; it is **not a security sandbox and not a guarantee** of read-only execution. Human review before running and human redaction after running both remain mandatory. |
-| Xavier inventory | **Blocked (B1):** no authorized SSH route to the Xavier was available to the agent. Nothing executed on any device. |
+| Xavier inventory | **Blocked (B1):** no authorized SSH route to the Xavier was available to the agent. Nothing executed on any device. Private VPN connectivity is now verified (owner-reported); device identity and SSH authentication are still pending. |
 | PyTorch stack (desk research) | For the proposed JetPack 5.1.x installation, NVIDIA's standard supported stack is Python 3.8 / CUDA 11.4 with wheel `torch 2.1.0a0+41361538.nv23.06` (cp38), SHA-256 measured. Must be confirmed against the observed device. |
-| Upstream compatibility | **Risk (B3):** upstream OctreeNCA targets Python 3.10 / CUDA 12.4. It fails at runtime under the proposed Python 3.8 environment. Proposed: separate Xavier development environment from a modern CUDA reference environment (D18, pending Dr. Iyad). |
-| OctreeNCA license | **Blocker (B2):** no license at the pinned commit, so all rights reserved. Stage 1 cannot start until resolved. Inquiry drafted (not sent); proposed internal decision deadline **16 Dec 2026** (D17). |
+| Upstream compatibility | **Risk (B3):** upstream OctreeNCA targets Python 3.10 / CUDA 12.4. It fails at runtime under the proposed Python 3.8 environment. Proposed: separate Xavier development environment from a modern CUDA reference environment (D18; supported by Anas, pending Dr. Iyad). |
+| OctreeNCA license | **Blocker (B2):** no license at the pinned commit, so all rights reserved. Stage 1 cannot start until resolved. Inquiry **sent 25 Nov 2026, awaiting response**; proposed internal decision deadline **16 Dec 2026** (D17; supported by Anas, pending Dr. Iyad). |
 | Host changes / data / training | **None.** |
 
 ## 1. System facts (observed; sanitized)
@@ -71,7 +71,9 @@ Inspected at upstream commit `70f7742` in a scratch checkout outside this reposi
 2. **Xavier with torch 2.1 cp38 plus a small local compatibility patch** (dict-union to `{**a, **b}`, `from __future__ import annotations`). This needs **modification rights** (B2) and still deviates from upstream's environment.
 3. **Build a non-standard Python/PyTorch on the Xavier** (e.g. Python 3.10 via jetson-containers or source builds). Possible but unofficial, multi-hour builds, high maintenance, and outside the NVIDIA-supported stack. Not recommended.
 
-### 2.2 Installation actions proposed (NOT executed; for human approval)
+### 2.2 Installation actions proposed (NOT executed; NOT approved)
+
+**Status (re-review, 25 Nov 2026): unapproved.** These commands stay unapproved until (a) the dependency lock is finalized with hashes, and (b) the actual Xavier environment is verified from the reviewed, redacted inventory. Approval then still requires Dr. Iyad.
 
 Run only after B1 is cleared and the inventory confirms aarch64, Python 3.8, CUDA 11.4 and JetPack 5.1.x. Everything installs into an unprivileged virtualenv under the developer's own account.
 
@@ -124,7 +126,7 @@ Expected footprint: about 170 MB download and about 1 GB installed. Rollback is 
 - **Commit:** `70f774232305b76330a75edef9fddda8ec960cab` (single commit "init", 2025-08-13, only branch `master`).
 - **Code paths:** the README names `src/models/Model_OctreeNCA_3d_patching2.py` (3D) and `..._2d_patching2.py`. `train_prostate2.py` exists, which confirms the plan's v1.1 pointers. Configs are composed from `configs/` and `src/utils/BaselineConfigs.py`. Storage paths must be set in `src/utils/ProjectConfiguration.py`, which upstream leaves as `<path>` placeholders.
 - **License findings:** **no LICENSE file, no SPDX or copyright headers, no license in packaging metadata.** Default copyright applies (all rights reserved). The provenance of individual files was not assessed; the inquiry asks the authors about any separately licensed files. The sibling lab repositories M3D-NCA and Med-NCA are MIT, so a license request looks promising. Full detail is in [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md).
-- **Author contacts:** inquiry **drafted, not sent** (kept outside the public repository; the owner sends it). Proposed internal decision deadline: **16 December 2026** (D17).
+- **Author contacts:** inquiry **sent by the project owner on 25 Nov 2026; awaiting response.** Correspondence is private and not published. Proposed internal decision deadline: **16 December 2026** (D17).
 - **Redistribution permission status:** **UNRESOLVED. Blocks copying upstream code into this public repository and, in practice, Stage 1.**
 
 ## 4. Redacted evidence
@@ -152,8 +154,8 @@ Expected footprint: about 170 MB download and about 1 GB installed. Rollback is 
 
 | ID | Blocker / risk | Owner | Proposed resolution |
 |---|---|---|---|
-| **B1** | No authorized access route to the Xavier for the agent. The registered remote hosts are unrelated cloud servers and were not probed | Anas / Dr. Iyad | Create the developer's own restricted account and SSH key on the Xavier (README step 1). Then either (a) a human runs `bash scripts/jetson_inventory.sh > stage0_inventory_local.log 2>&1`, redacts it and attaches it to this PR, or (b) the Xavier is registered for the agent with an **allowlist** policy permitting only that command |
-| **B2** | OctreeNCA has no license | Anas, then Dr. Iyad | Email the authors requesting an MIT license or written grant (`docs/UPSTREAM_LICENSE_REVIEW.md`). Inquiry drafted, not sent. Internal decision on **16 Dec 2026** (D17): license/grant in hand, extend, or authorize clean-room re-implementation. Parallel architecture-independent work is proposed in [`docs/proposals/PARALLEL_DEVELOPMENT_WHILE_LICENSE_PENDING.md`](../docs/proposals/PARALLEL_DEVELOPMENT_WHILE_LICENSE_PENDING.md), not executed |
+| **B1** | No authorized access route to the Xavier for the agent. The registered remote hosts are unrelated cloud servers and were not probed. **Update 25 Nov 2026 (owner-reported):** private VPN connectivity to Dr. Iyad's device is verified, including a direct peer connection; **device identity and SSH authentication remain pending**; an SSH access guide has been prepared for Dr. Iyad (kept private) | Anas / Dr. Iyad | Create the developer's own restricted account and SSH key on the Xavier (README step 1). Then either (a) a human runs `bash scripts/jetson_inventory.sh > stage0_inventory_local.log 2>&1`, redacts it and attaches it to this PR, or (b) the Xavier is registered for the agent with an **allowlist** policy permitting only that command |
+| **B2** | OctreeNCA has no license | Anas, then Dr. Iyad | Email the authors requesting an MIT license or written grant (`docs/UPSTREAM_LICENSE_REVIEW.md`). Inquiry sent 25 Nov 2026, awaiting response. Internal decision on **16 Dec 2026** (D17): license/grant in hand, extend, or authorize clean-room re-implementation. Parallel architecture-independent work is proposed in [`docs/proposals/PARALLEL_DEVELOPMENT_WHILE_LICENSE_PENDING.md`](../docs/proposals/PARALLEL_DEVELOPMENT_WHILE_LICENSE_PENDING.md), not executed; initial priority P1, P2, P4, P7, P8, synthetic-data-only and CPU-only (D19, pending Dr. Iyad) |
 | **B3** | Upstream needs Python >= 3.9 at runtime; the proposed standard JetPack 5.1.x environment provides Python 3.8 / CUDA 11.4 | Dr. Iyad | Choose an option in section 2.1 (recommended: option 1, separate environments, D18) |
 | R1 | 16 GB shared CPU/GPU memory; thermal and power behaviour unknown | - | Measure in Stage 3; never change power mode without approval |
 | R2 | NVIDIA's prebuilt JetPack 5 PyTorch wheels stop at torch 2.1 (2023 build) | - | Accept for exploration; confirmatory work runs on HPC anyway |
@@ -199,8 +201,19 @@ Expected footprint: about 170 MB download and about 1 GB installed. Rollback is 
 | 4 | Stronger repository-policy checks | Restricted directories matched at any depth; more artefact types (pickle, joblib, mat, tiff, tfevents); log and raw-output files; images outside `docs/figures/`; evidence files need a human redaction header and no identifiers. New `tests/test_repo_policy.sh` (24 synthetic violations) runs in CI |
 | 5 | Remove unverified third-party copyright allegations | Removed from `docs/UPSTREAM_LICENSE_REVIEW.md` and this report. Replaced with "provenance of individual files not assessed", raised as a neutral question in the private inquiry draft. Note: the earlier wording remains in commit `f0f2eef` on this branch's history; a squash merge keeps it out of `main` |
 | 6 | Python 3.8 / CUDA 11.4 are not absolute Xavier limits | Reframed throughout as the standard supported stack of the proposed JetPack 5.1.x installation |
-| - | License inquiry and deadline | Drafted outside the public repo, **not sent**. 16 Dec 2026 proposed as the internal decision deadline (D17) |
-| - | Separate environments | Recorded as D18, pending Dr. Iyad |
+| - | License inquiry and deadline | Drafted privately; **sent by the owner on 25 Nov 2026, awaiting response** (correspondence not published). 16 Dec 2026 proposed as the internal decision deadline (D17) |
+| - | Separate environments | Recorded as D18; supported by Anas, pending Dr. Iyad |
 | - | Parallel development while license is pending | Proposal in `docs/proposals/PARALLEL_DEVELOPMENT_WHILE_LICENSE_PENDING.md`; **not executed** |
 
 Issue #1 stays open and Stage 0 remains **incomplete** until the redacted on-device inventory is attached and Dr. Iyad signs off.
+
+## 9. Re-review (round 2, exact head `878197a`) - status updates
+
+- **Technical verdict (Anas):** GO for the preparatory repository changes, **subject to Dr. Iyad's merge authorization**, using a **squash merge**. All six round-1 findings were accepted as addressed, and GitHub Actions was verified green on `878197a`.
+- **Stage status:** Stage 0 remains **incomplete** and issue #1 stays open until the Xavier inventory is collected and reviewed.
+- **License (B2):** inquiry sent 25 Nov 2026, awaiting response. Correspondence is private.
+- **D17 / D18:** supported by Anas; pending Dr. Iyad.
+- **Xavier access (B1):** private VPN connectivity verified, including a direct peer connection (owner-reported). Device identity and SSH authentication are pending. An SSH access guide for Dr. Iyad exists and is kept private.
+- **Parallel development (D19):** Anas supports the initial priority set P1, P2, P4, P7 and P8, using synthetic data only and CPU only. It is **not approved and not started**; it awaits scientific approval.
+- **Installation (section 2.2):** remains **unapproved** until the dependency lock is finalized and the actual Xavier environment is verified.
+- Not done and not authorized: merge, package installation, training, any scientific stage advance.

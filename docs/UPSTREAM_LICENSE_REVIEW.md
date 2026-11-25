@@ -2,7 +2,8 @@
 
 **Status: UNRESOLVED. No license is granted by this file. Not legal advice.**
 Last updated: 25 Nov 2026 (Stage 0, issue #1, review round 1).
-**Internal licensing decision deadline (proposed): 16 December 2026** (see `DECISIONS.md` D17).
+**Internal licensing decision deadline (proposed; supported by Anas, pending Dr. Iyad): 16 December 2026** (see `DECISIONS.md` D17).
+**Inquiry status:** sent 25 Nov 2026, awaiting response.
 
 ## Findings at the pinned commit
 
@@ -34,13 +35,13 @@ With no license, the default is **all rights reserved** by the copyright holders
 
 ## Recommended resolution (ranked)
 
-1. **Ask the authors to add an OSI license to the repository** (ideally MIT, matching M3D-NCA). Contact: the authors listed on arXiv:2508.06993 (MECLab, TU Darmstadt), using addresses from the paper or institutional pages, verified by the sender. This is the cleanest outcome and benefits everyone. Also ask whether any files carry separate third-party licenses. A draft inquiry exists outside the public repository and is sent only by the project owner.
+1. **Ask the authors to add an OSI license to the repository** (ideally MIT, matching M3D-NCA). Contact: the authors listed on arXiv:2508.06993 (MECLab, TU Darmstadt), using addresses from the paper or institutional pages, verified by the sender. This is the cleanest outcome and benefits everyone. Also ask whether any files carry separate third-party licenses. The inquiry was sent by the project owner on 25 Nov 2026 (awaiting response); correspondence is kept private.
 2. **Written permission** for this project (use, modification, publication of derived code and weights) if they won't add a license. Archive it privately and summarise it in `reports/license_review.md`.
 3. **Clean-room re-implementation** from the paper, if neither a license nor a written grant is in hand by the **16 December 2026** decision point. Higher engineering cost, and reproduction fidelity to the published prostate Dice becomes harder to claim. Clean-room hygiene: the person writing the implementation must not read the upstream source.
 
 ## Still pending
 
-- Upstream author contact and inquiry date: **drafted, not sent** (owner action; it is an outward-facing message).
+- Upstream author contact and inquiry date: **sent 25 Nov 2026 by the project owner; awaiting response.** Correspondence is kept private and is not published here.
 - Decision at 16 Dec 2026 (owner + Dr. Iyad): proceed with upstream under license/grant, extend the wait, or authorize clean-room re-implementation.
 - Institutional (UoN) review of internal use: **PENDING**.
 - Permission to distribute trained weights and derivative assets: **PENDING**.
