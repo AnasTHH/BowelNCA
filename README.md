@@ -2,6 +2,8 @@
 
 **Status: research development starter, not trained or validated.**
 
+> **This repository is public by design, from day one.** Everything committed here, including issues, pull requests, CI logs and review comments, is world-readable. Never commit or paste raw MRI, masks, patient metadata, unredacted device logs, hostnames, usernames, IP addresses, credentials or upstream OctreeNCA source. See [`docs/DATA_GOVERNANCE.md`](docs/DATA_GOVERNANCE.md).
+
 This repository starter implements the **engineering contract and read-only Stage 0 check**, not a segmentation model. Its authoritative specification is [`docs/DEVELOPMENT_PLAN_v1.2.md`](docs/DEVELOPMENT_PLAN_v1.2.md).
 
 ## Scope and scientific questions
@@ -18,16 +20,16 @@ This repository starter implements the **engineering contract and read-only Stag
 - A research governance and approvals log.
 - A ready-to-paste Claude Code Stage 0 handoff.
 - A read-only Jetson inventory script and stage report template.
-- A safe Git ignore policy and a lightweight repository-policy CI check.
+- A Git ignore policy (`.gitignore`) and a repository-policy CI workflow (`.github/workflows/research-contract.yml`) that runs ShellCheck, a no-data/no-secrets check and a read-only guard test for the inventory script on GitHub-hosted runners.
 
 ## First action on Dr. Iyad's Xavier
 
 1. Create a **separate user account and SSH key** for the developer; do not reuse Dr. Iyad's credentials.
-2. Clone the future research repository or transfer this package to a controlled development directory. Do not transfer raw MRI or test annotations to the Xavier.
+2. Clone this public repository (`git clone https://github.com/AnasTHH/BowelNCA.git`) into a controlled development directory under that account. Do not transfer raw MRI or test annotations to the Xavier.
 3. Inspect [`docs/STAGE_0_CLAUDE_HANDOFF.md`](docs/STAGE_0_CLAUDE_HANDOFF.md) and run only the read-only inventory:
 
    ```bash
-   bash scripts/jetson_inventory.sh | tee stage0_inventory_local.log
+   bash scripts/jetson_inventory.sh > stage0_inventory_local.log 2>&1   # git-ignored
    ```
 
 4. Review/redact the local inventory log before attaching it to `reports/stage_0.md`; verify matching NVIDIA Jetson ARM64 PyTorch support.
@@ -53,8 +55,11 @@ This repository starter implements the **engineering contract and read-only Stag
 | `docs/STAGE_GATES.md` | PR/review and scientific approval process |
 | `docs/UPSTREAM_LICENSE_REVIEW.md` | License verification template |
 | `scripts/jetson_inventory.sh` | Read-only system information collector |
+| `scripts/check_repo_policy.sh` | Public-repo policy check (no data, weights, secrets) |
+| `tests/` | Read-only guard and mutation tests for the inventory script |
+| `reports/stage_0.md` | Stage 0 report (pending review) |
 | `reports/stage_0_TEMPLATE.md` | Stage 0 evidence format |
 
 ## Publication
 
-Public release is planned **after** rights checks, documentation, reproducibility review, and scientific authorization. No raw clinical datasets are distributed in this starter. Dataset attribution belongs to the original Zhong et al. Zenodo record. Do not add an unverified upstream license or cite an unmeasured result.
+The **source repository** is public from day one. What remains gated is the release of anything beyond engineering code and documentation: trained weights, scientific results, figures derived from patient images, upstream-derived OctreeNCA code, a tagged software release and DOI. Each requires rights checks, reproducibility review and scientific authorization. No raw clinical datasets are distributed in this repository. Dataset attribution belongs to the original Zhong et al. Zenodo record. Do not add an unverified upstream license or cite an unmeasured result.

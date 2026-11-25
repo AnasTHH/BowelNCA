@@ -16,6 +16,7 @@
 | D12 | Upstream OctreeNCA code licensing / redistribution | **Open gate** | Verify explicit rights before publication |
 | D13 | Alternative annotations are audit-only, not rater ceiling | Approved | Dr. Iyad, v1.2 correction |
 | D14 | Start Stage 0 read-only Xavier verification | Authorized to prepare and execute | User approval to begin on 25 Nov 2026 |
-| D15 | Host changes, long training, paid GPU spend, full HPC matrix, public release | **Not authorized by this package** | Require separately recorded sign-off |
+| D15 | Host changes, long training, paid GPU spend, full HPC matrix, public release of weights/results/upstream-derived code | **Not authorized by this package** | Require separately recorded sign-off |
+| D16 | Source repository is public from day one (code, docs, redacted reports only) | Owner decision; recorded, pending Dr. Iyad acknowledgment | Anas, 25 Nov 2026; Stage 0 PR. Does not authorize release of weights, results or upstream-derived code (D12, D15) |
 
 Any changed scientific decision requires a new log row specifying date, requester, approving reviewer, rationale, affected protocol version and impact on published comparisons.

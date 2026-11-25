@@ -1,0 +1,86 @@
+# PUBLIC repository: never commit patient data, checkpoints, secrets or raw logs.
+
+# Data and derived artefacts (see docs/DATA_GOVERNANCE.md)
+data/
+artifacts/
+checkpoints/
+runs/
+outputs/
+aim/
+.aim/
+wandb/
+mlruns/
+
+# Medical imaging formats
+*.nii
+*.nii.gz
+*.mha
+*.mhd
+*.nrrd
+*.dcm
+*.dicom
+*.ima
+
+# Model weights / binary arrays / engines
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.engine
+*.trt
+*.npy
+*.npz
+*.h5
+*.hdf5
+
+# Third-party checkouts (upstream OctreeNCA stays a separate, pinned checkout)
+third_party/
+upstream/
+OctreeNCA/
+
+# Wheels and archives
+*.whl
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.7z
+
+# Unredacted local logs (redacted copies go in reports/ explicitly)
+*_inventory_local.log
+*.log
+logs/
+
+# Secrets and credentials
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials*.json
+.ssh/
+
+# Python / tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+.ipynb_checkpoints/
+*.egg-info/
+build/
+dist/
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

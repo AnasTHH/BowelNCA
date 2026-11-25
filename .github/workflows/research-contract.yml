@@ -1,0 +1,44 @@
+name: research-contract
+
+# Public repository: this workflow runs on GitHub-hosted runners only, with
+# read-only token permissions, synthetic inputs and no secrets. Never add a
+# self-hosted (Xavier/HPC) runner to a workflow triggered by pull_request from
+# forks; see docs/DATA_GOVERNANCE.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh tests/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh tests/*.sh
+
+      - name: Repository policy (no data, weights, secrets)
+        run: bash scripts/check_repo_policy.sh
+
+      - name: Inventory script is read-only
+        run: bash tests/test_inventory_readonly.sh
+
+      - name: Read-only guard rejects injected mutations
+        run: bash tests/test_inventory_guard_mutations.sh
