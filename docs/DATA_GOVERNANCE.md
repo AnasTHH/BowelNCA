@@ -40,3 +40,12 @@ Make sure data identifiers cannot be reverse-mapped to patients without authoriz
 ## Publication boundary
 
 No raw NIfTI volumes, real patient masks, DICOM IDs, credentials or private storage paths in GitHub Actions logs, code review comments or public issues. Publication of exemplar MRI overlays, derived masks and checkpoints is subject to dataset license/rights review and human approval.
+
+## Public repository consequences
+
+The GitHub repository is **public from day one** (owner decision, 25 Nov 2026; see `DECISIONS.md` D16). Treat every commit, issue, pull request, review comment, Actions log and artifact as world-readable and permanently cached.
+
+- Device evidence (inventory logs) is committed only after redaction of hostnames, usernames, IP/MAC addresses, serial numbers and home-directory paths. Unredacted logs stay local (`*_inventory_local.log` is git-ignored).
+- Hosted CI uses GitHub-hosted runners, `permissions: contents: read`, no secrets and synthetic inputs only.
+- **Self-hosted runners (Xavier or HPC) must never be attached to workflows that run on `pull_request` events.** On a public repository any fork can open a PR, and a self-hosted runner would execute that untrusted code on the device that holds development data. The plan's optional "GPU smoke via a private runner" (Plan Section 12) therefore needs a design review before it is enabled: for example, `workflow_dispatch` only, an environment with required reviewers, an ephemeral runner, and no data mounts.
+- `scripts/check_repo_policy.sh` blocks restricted directories at any depth (data, steward, locked-test, alternate-label, artefact, log and upstream-checkout folders), medical-image, weight, pickle, archive and key file types, log and raw console files, images outside `docs/figures/`, secret-like strings and files over 2 MiB. Committed device evidence must live in `reports/evidence/` and start with `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`. Unapproved drafts are never committed (a folder in a public repository is not private): any `evidence-draft` path or file marked `PENDING-HUMAN-APPROVAL` is rejected. Approved evidence is scanned for private, VPN (CGNAT) and link-local IPv4, `*.ts.net` names, private IPv6, MAC addresses, emails, home paths, block-device paths and SSH key material. It is a safety net for mistakes, not an access control.

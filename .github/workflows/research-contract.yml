@@ -1,0 +1,50 @@
+name: research-contract
+
+# Public repository: this workflow runs on GitHub-hosted runners only, with
+# read-only token permissions, synthetic inputs and no secrets. Never add a
+# self-hosted (Xavier/HPC) runner to a workflow triggered by pull_request from
+# forks; see docs/DATA_GOVERNANCE.md.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: research-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  policy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Shell syntax
+        run: |
+          set -euo pipefail
+          for f in scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh tests/*.sh; do bash -n "$f"; done
+
+      - name: ShellCheck
+        run: shellcheck -S warning scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh tests/*.sh
+
+      - name: Repository policy (no data, weights, secrets)
+        run: bash scripts/check_repo_policy.sh
+
+      - name: Repository policy rejects synthetic violations
+        run: bash tests/test_repo_policy.sh
+
+      - name: Inventory regression check (not a security sandbox)
+        run: bash tests/test_inventory_readonly.sh
+
+      - name: Regression check rejects known-bad mutations
+        run: bash tests/test_inventory_guard_mutations.sh
+
+      - name: Proposed installer, smoke test and workspace verifier (stubbed, no network, no installs)
+        run: bash tests/test_proposed_scripts.sh

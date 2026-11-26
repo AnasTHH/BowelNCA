@@ -2,6 +2,8 @@
 
 **Status: research development starter, not trained or validated.**
 
+> **This repository is public by design, from day one.** Everything committed here, including issues, pull requests, CI logs and review comments, is world-readable. Never commit or paste raw MRI, masks, patient metadata, unredacted device logs, hostnames, usernames, IP addresses, credentials or upstream OctreeNCA source. See [`docs/DATA_GOVERNANCE.md`](docs/DATA_GOVERNANCE.md).
+
 This repository starter implements the **engineering contract and read-only Stage 0 check**, not a segmentation model. Its authoritative specification is [`docs/DEVELOPMENT_PLAN_v1.2.md`](docs/DEVELOPMENT_PLAN_v1.2.md).
 
 ## Scope and scientific questions
@@ -18,19 +20,16 @@ This repository starter implements the **engineering contract and read-only Stag
 - A research governance and approvals log.
 - A ready-to-paste Claude Code Stage 0 handoff.
 - A read-only Jetson inventory script and stage report template.
-- A safe Git ignore policy and a lightweight repository-policy CI check.
+- A Git ignore policy (`.gitignore`) and a repository-policy CI workflow (`.github/workflows/research-contract.yml`) that runs ShellCheck, a no-data/no-secrets policy check and regression tests on GitHub-hosted runners. The tests catch known mistakes; they are not a security sandbox.
 
-## First action on Dr. Iyad's Xavier
+## Xavier status (Stage 0, 26 Nov 2026)
 
-1. Create a **separate user account and SSH key** for the developer; do not reuse Dr. Iyad's credentials.
-2. Clone the future research repository or transfer this package to a controlled development directory. Do not transfer raw MRI or test annotations to the Xavier.
-3. Inspect [`docs/STAGE_0_CLAUDE_HANDOFF.md`](docs/STAGE_0_CLAUDE_HANDOFF.md) and run only the read-only inventory:
+The read-only inventory was run manually by the project owner (script commit `e26e3db`). Observed: JetPack 5.1.6, L4T R35.6.4, Python 3.8.10, CUDA 11.4, cuDNN 8.6, TensorRT 8.5; root eMMC 4.5 GiB free, NVMe `/data` 363 GiB free. The research workspace is `/data/bowelnca` (D20). See [`reports/stage_0.md`](reports/stage_0.md).
 
-   ```bash
-   bash scripts/jetson_inventory.sh | tee stage0_inventory_local.log
-   ```
-
-4. Review/redact the local inventory log before attaching it to `reports/stage_0.md`; verify matching NVIDIA Jetson ARM64 PyTorch support.
+1. **Evidence.** Unapproved evidence drafts never enter this public repository; they stay in private storage until a human attests the redaction. Approved evidence goes in `reports/evidence/` with the header `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`. CI rejects drafts and scans approved evidence for network addresses, hostnames, home paths and key material. Raw logs stay private.
+2. **Workspace check (non-destructive):** `bash scripts/verify_workspace.sh [--layout interim|separated] [--write-test]`.
+3. **Account separation (proposed, D21):** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (administrator and research accounts, directory layout, migration procedure).
+4. **Installation: proposed as Stage 1A, not approved.** [`docs/XAVIER_ENVIRONMENT.md`](docs/XAVIER_ENVIRONMENT.md) describes separate, versioned core and scientific venvs on the NVMe using NVIDIA's JetPack 5 PyTorch wheel and hash-locked dependencies. The script in `scripts/proposed/` refuses to run without D21 in place, recorded approval references and the reviewed commit. Approval references guard against accidental execution; they are not authentication.
 5. Obtain approval before any installation, power-mode change, firmware update, external code import or long training job.
 
 ## Explicit non-approvals
@@ -53,8 +52,18 @@ This repository starter implements the **engineering contract and read-only Stag
 | `docs/STAGE_GATES.md` | PR/review and scientific approval process |
 | `docs/UPSTREAM_LICENSE_REVIEW.md` | License verification template |
 | `scripts/jetson_inventory.sh` | Read-only system information collector |
+| `scripts/check_repo_policy.sh` | Public-repo policy check (no data, weights, secrets) |
+| `scripts/verify_workspace.sh` | Non-destructive Xavier workspace verification |
+| `scripts/proposed/install_xavier_env.sh` | Proposed installer (**not approved**; refuses to run without an approval token) |
+| `env/xavier/` | Hash-locked dependency sets for the Xavier (bootstrap, core, scientific) and the wheel manifest |
+| `docs/XAVIER_ENVIRONMENT.md` | Installation proposal and dependency assessment |
+| `docs/XAVIER_ACCESS_AND_SECURITY.md` | Access, security and data-governance assessment |
+| `scripts/lib/workspace_checks.sh` | Shared read-only workspace and account checks |
+| `docs/proposals/STAGE_1A_1B_SPLIT.md` | Proposed Stage 1A (environment) / 1B (upstream reproduction) split |
+| `tests/` | Regression tests for the inventory script, repository policy and proposed scripts (not security guarantees) |
+| `reports/stage_0.md` | Stage 0 report (pending review) |
 | `reports/stage_0_TEMPLATE.md` | Stage 0 evidence format |
 
 ## Publication
 
-Public release is planned **after** rights checks, documentation, reproducibility review, and scientific authorization. No raw clinical datasets are distributed in this starter. Dataset attribution belongs to the original Zhong et al. Zenodo record. Do not add an unverified upstream license or cite an unmeasured result.
+The **source repository** is public from day one. What remains gated is the release of anything beyond engineering code and documentation: trained weights, scientific results, figures derived from patient images, upstream-derived OctreeNCA code, a tagged software release and DOI. Each requires rights checks, reproducibility review and scientific authorization. No raw clinical datasets are distributed in this repository. Dataset attribution belongs to the original Zhong et al. Zenodo record. Do not add an unverified upstream license or cite an unmeasured result.

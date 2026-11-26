@@ -1,7 +1,0 @@
-# TEMPLATE ONLY - DO NOT pip install -r THIS FILE AS-IS.
-# Pin a JetPack-specific NVIDIA ARM64 PyTorch wheel after Stage 0 checks.
-# Leave all versions empty until exact compatibility is measured/reviewed.
-# Record wheel URL, sha256, python ABI and import/CUDA smoke in stage_0.md.
-# DO NOT replace PyTorch with a generic pip torch build on Jetson.
-# Other dependencies (numpy/scipy/monai/nibabel/SimpleITK/scikit-image)
-# must be version-locked against Python 3.8 and chosen NVIDIA PyTorch.
