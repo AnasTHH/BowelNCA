@@ -177,15 +177,15 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | ~~E1~~ | Owner's redaction attestation of the sanitized evidence | **Accepted.** Attested by Anas (AN, 2026-11-26); published in `reports/evidence/` | - |
 | ~~W1~~ | Workspace check and write test (interim layout) | **PASSED** 2026-11-26T08:40:33Z at `73dbac6` (0 FAIL, 2 expected WARN) | - |
 | W2 | Separated-layout verification (`--layout separated`) | After D21 migration; part of Stage 1A | Administrator, then research account |
-| S1 / D21 | Account separation, layout and migration | **Proposed, not executed.** Prerequisite for D22. Approval would authorize the documented manual migration by the device administrator, but not autonomous agent execution | Dr. Iyad and the device administrator |
-| D24 | Split Stage 1 into 1A (environment) and 1B (upstream reproduction) | Proposed; stage definitions unchanged until sign-off | Dr. Iyad |
-| I1 / D22 | Core environment install and CUDA smoke test (G1) | **Not approved** (proposed Stage 1A) | Dr. Iyad |
-| I2 / D23 | Scientific environment install and import checks | **Not approved**; separate from D22 | Dr. Iyad |
+| S1 / D21 | Account separation, layout and migration | **Approved by the owner (26 Nov 2026), not yet executed.** Prerequisite for D22. Authorizes the documented manual migration by the human administrator, not autonomous agent execution | Anas, as administrator (D25) |
+| D24 | Split Stage 1 into 1A (environment) and 1B (upstream reproduction) | Owner-approved; approved stage definitions change only with Dr. Iyad's acknowledgment | Dr. Iyad (acknowledgment) |
+| I1 / D22 | Core environment install and CUDA smoke test (G1) | **Owner-approved, conditional** on D21, W2 and the Stage 0 to Stage 1A gate; not executed | Dr. Iyad (Stage 0 acceptance), then Anas |
+| I2 / D23 | Scientific environment install and import checks | **Owner-approved, conditional** on a passing D22 core record; not executed | Anas |
 | I3 | Privileged prerequisites, only if `--check-only` reports `python3.8-venv` or `libopenblas` missing | Not requested | Dr. Iyad |
 | B2 | OctreeNCA license | Inquiry sent, awaiting response; decision 16 Dec 2026 (D17) | Authors, then Anas and Dr. Iyad |
-| B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 proposed (separate environments) | Dr. Iyad |
-| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 **recommended for approval** by Anas (round 4) so it can start without waiting for the license; **not started** | Dr. Iyad (scientific approval) |
-| M | Merge PR #2 (squash) | **Engineering review accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`** (all 122 regression checks passing). This documentation-only revision follows it and needs verification of its exact head. Earlier GOs applied only to their reviewed commits | Anas (verify this head), then Dr. Iyad's merge authorization |
+| B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 approved by the owner (separate environments) | - |
+| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 **approved by the owner** (26 Nov 2026); **not started** | Dr. Iyad (scientific approval) |
+| M | Merge PR #2 (squash) | **Engineering review accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`**; documentation head `ee60a3a` accepted by Anas (CI run 45795277612). Squash merge authorized by the owner on 26 Nov 2026; later commits are approval records only, with the engineering tree unchanged | Anas (a human merges; agents never merge their own PRs) |
 
 ### Stage 0 acceptance criteria (issue #1)
 

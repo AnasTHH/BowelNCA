@@ -1,6 +1,6 @@
 # Proposal: split Stage 1 into 1A (Xavier environment) and 1B (upstream reproduction)
 
-**Status: PROPOSED (D24). Not approved.** The approved stage definitions in `docs/STAGE_GATES.md` and `docs/DEVELOPMENT_PLAN_v1.2.md` are unchanged until Dr. Iyad signs off. Requested by the round 3 review (R3-09), 26 Nov 2026.
+**Status: approved by the project owner (Anas, 26 Nov 2026) (D24); Dr. Iyad's acknowledgment still required.** The approved stage definitions in `docs/STAGE_GATES.md` and `docs/DEVELOPMENT_PLAN_v1.2.md` are unchanged until Dr. Iyad signs off. Requested by the round 3 review (R3-09), 26 Nov 2026.
 
 ## Why
 

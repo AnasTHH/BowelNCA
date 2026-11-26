@@ -1,6 +1,6 @@
 # Proposal: architecture-independent development while the OctreeNCA license is pending
 
-**Status: PROPOSAL ONLY. Not authorized and not executed** (decision D19, pending Dr. Iyad). Anas supports it (re-review, 25 Nov 2026), with initial priority **P1, P2, P4, P7, P8**, **synthetic data only and CPU only**, subject to scientific approval. It needs Dr. Iyad's approval because it starts parts of Stage 2 engineering before Stages 0 and 1 have closed.
+**Status: approved by the project owner (Anas, 26 Nov 2026); Dr. Iyad's scientific approval still required; not started** (decision D19). Anas supports it (re-review, 25 Nov 2026), with initial priority **P1, P2, P4, P7, P8**, **synthetic data only and CPU only**, subject to scientific approval. It needs Dr. Iyad's approval because it starts parts of Stage 2 engineering before Stages 0 and 1 have closed.
 **Date:** 25 Nov 2026 · **Plan:** `docs/DEVELOPMENT_PLAN_v1.2.md` · **Related:** D12, D17, D18, issue #1
 
 ## 1. Problem

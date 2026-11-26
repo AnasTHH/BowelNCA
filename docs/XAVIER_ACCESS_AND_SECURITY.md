@@ -1,6 +1,6 @@
 # Xavier access, security and data-governance assessment
 
-**Status: assessment and PROPOSAL.** No account, group, permission or system change has been made or is authorized by this document. Every step below is a manual task for the device administrator, after Dr. Iyad's recorded approval (D21).
+**Status: D21 approved by the project owner (Anas, 26 Nov 2026), under the device-administration authority Dr. Iyad delegated to him (D25). Not yet executed.** Every step below is a manual task for the human administrator; this approval does not authorize autonomous agent execution. No further account changes have been made following the initial authorized access setup.
 **Last updated:** 26 Nov 2026 (round 3 revision). Network addresses, VPN configuration, hostnames, account names and key material are intentionally omitted (public repository). The proposed account names are held in the project's private notes; this document uses `<admin-account>`, `<research-account>` and `<research-group>`.
 
 ## 1. Current state (owner-reported, 26 Nov 2026)
