@@ -1,26 +1,26 @@
 # Stage 0 - Xavier system and compatibility report
 
-**Date (UTC):** 2026-11-26 (revision 4; first drafted 2026-11-25)
+**Date (UTC):** 2026-11-26 (revision 5, after review round 3; first drafted 2026-11-25)
 **Device owner/reviewer:** Dr. Iyad Naim
 **Engineer:** Claude Code (lead implementation agent), for Anas
 **Git commit:** head of PR #2 (see PR for the exact SHA and CI run)
 **Plan version:** `docs/DEVELOPMENT_PLAN_v1.2.md`
-**Status:** **Draft - Stage 0 INCOMPLETE.** The hardware and software inventory has been collected (by the owner) and is pending human redaction approval. Workspace verification, environment installation and the GPU smoke test are **outstanding and unapproved**. No stage is approved by this report.
+**Status:** **Draft - Stage 0 INCOMPLETE.** The inventory has been collected by the owner; the reviewer found the sanitized summary technically acceptable, pending the owner's formal redaction attestation. Workspace verification is outstanding. Installation and the GPU smoke test are **unapproved** and proposed for a separate Stage 1A (D24). No stage is approved by this report, and no earlier technical GO applies to the current head.
 
 ## 0. Summary for the reviewer
 
 | Area | State | Evidence |
 |---|---|---|
 | Xavier access | **Done (human only).** Private VPN with a direct peer connection; OpenSSH with a dedicated ED25519 key; dedicated project account with password-protected sudo granted by the device administrator. The agent has **no** access | Owner report, 26 Nov |
-| Hardware/software inventory | **Collected** 2026-11-26T07:20:16Z with the reviewed script (commit `e26e3db`, blob `16b7cb9f`, re-verified). Sanitized summary **pending human redaction approval** | [`reports/evidence-draft/stage0_inventory_2026-11-26_sanitized.md`](evidence-draft/stage0_inventory_2026-11-26_sanitized.md) |
+| Hardware/software inventory | **Collected** 2026-11-26T07:20:16Z with the reviewed script (commit `e26e3db`, blob `16b7cb9f`, re-verified). The sanitized summary was compared against the owner's terminal output by the round 3 reviewer: consistent, no sensitive identifiers. **Pending the owner's redaction attestation**; until then it is kept in private project storage, not in this public repository | Section 1 (values); E1 |
 | Storage | **Verified (owner-reported).** Root eMMC 4.5 GiB free (83% used); existing NVMe `/data` 363 GiB free. No storage purchase, repartitioning or OS migration needed | Section 1.3 |
-| Research workspace | **Created** at `/data/bowelnca` (mode 700). Write test and final ownership/mount check **pending** | Section 1.4; `scripts/verify_workspace.sh` |
+| Research workspace | **Created** at `/data/bowelnca` (mode 700, interim layout). Write test and mount/ownership check **pending**; the administrator-owned target layout is proposed (D21) | Section 1.4; `scripts/verify_workspace.sh` |
 | PyTorch wheel | **Re-verified 26 Nov:** NVIDIA `torch 2.1.0a0+41361538.nv23.06`, cp38, CUDA 11.4, SHA-256 unchanged. Matches the observed JetPack 5.1.6 / Python 3.8.10 / CUDA 11.4 / cuDNN 8.6. Compatibility on 5.1.6 is **inferred until the smoke test runs** | Section 2 |
-| Dependencies | **Hash-locked** for cp38/aarch64: bootstrap, core and scientific locks. All binary wheels; no compilation needed | `env/xavier/`, `docs/XAVIER_ENVIRONMENT.md` |
-| Installation | **Proposal ready, NOT approved, NOT executed.** Fail-closed script with CI regression tests | `scripts/proposed/install_xavier_env.sh` |
+| Dependencies | **Hash-locked** for cp38/aarch64. A machine-readable manifest records all 51 actual wheels (filename, version, tags, Requires-Python, SHA-256). All binary wheels; no compilation needed | `env/xavier/dependency-manifest.json`, `docs/XAVIER_ENVIRONMENT.md` |
+| Installation | **Proposal revised, NOT approved, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 88 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
 | GPU / CUDA functionality | **Not tested.** PyTorch is not installed | - |
 | OctreeNCA license | **Unresolved (B2).** Inquiry sent 25 Nov 2026, awaiting response; decision point 16 Dec 2026 (D17) | `docs/UPSTREAM_LICENSE_REVIEW.md` |
-| Security | Assessment and account-separation proposal written; **no changes made** | `docs/XAVIER_ACCESS_AND_SECURITY.md` |
+| Security | Account separation (D21) with directory layout and a migration procedure that preserves current access; **no changes made** | `docs/XAVIER_ACCESS_AND_SECURITY.md` |
 | Host changes by the agent / data / training | **None** | - |
 
 ## 1. System facts (observed, sanitized)
@@ -63,13 +63,13 @@ The existing NVMe is sufficient, so no storage expansion, repartitioning or OS m
 
 `/data/bowelnca/` was created by the owner with the administrator's grant (`install -d -m 700`, owned by the project account). It has the subdirectories `workspace venvs datasets derived checkpoints experiments reports cache tmp`. Both commands returned without errors.
 
-**Pending:** run [`scripts/verify_workspace.sh --write-test`](../scripts/verify_workspace.sh). It is non-destructive: it writes one 1 MiB temp file in `tmp/`, verifies it and removes it. It confirms ownership, mode 700, the `/data` ext4 mount, separation from the root filesystem, unchanged `/data` ownership, free space, cache leakage under HOME and risky group membership. It prints no usernames, hostnames or device names.
+**Pending (W1):** run [`scripts/verify_workspace.sh --write-test`](../scripts/verify_workspace.sh) (interim layout). It checks ownership, mode, canonical paths, the `/data` ext4 mount, nested mounts, separation from the root filesystem, unchanged `/data` ownership, free space in bytes, cache growth under HOME and privileged groups. Only if every check passes does it write one 1 MiB file in `tmp/`, fsync that file, verify size and checksum and remove it (removed on any failure). It prints no usernames, hostnames or device names. After D21, the same script with `--layout separated` verifies the target layout.
 
 ### 1.5 Observations (no action authorized)
 
 - The SSH client reports that no post-quantum key exchange was negotiated. Authentication works.
 - Some EMC parameters are unreadable without privileges.
-- The root filesystem is nearly full. The installer refuses to install onto it, and redirects every cache (`TMPDIR`, `PIP_CACHE_DIR`, `XDG_CACHE_HOME`, `TORCH_HOME`, `TORCH_EXTENSIONS_DIR`, `MPLCONFIGDIR`, `PYTHONPYCACHEPREFIX`) to `/data/bowelnca`.
+- The root filesystem is nearly full. The installer refuses to install onto it, uses no pip cache, puts `TMPDIR` on the NVMe and keeps `TORCH_HOME`, `TORCH_EXTENSIONS_DIR`, `MPLCONFIGDIR` and `XDG_CACHE_HOME` inside the venv.
 
 ## 2. NVIDIA PyTorch compatibility determination
 
@@ -77,7 +77,7 @@ The existing NVMe is sufficient, so no storage expansion, repartitioning or OS m
 |---|---|
 | Wheel | `torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl` |
 | URL | `https://developer.download.nvidia.com/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl` |
-| SHA-256 | `5112e2ef5051f1003ae2ffb545ae596377df66979d62a954d774f18009064dbe`. **Downloaded and hashed 25 Nov and 26 Nov 2026 (identical)** in the agent's cloud sandbox, then deleted |
+| SHA-256 | `5112e2ef5051f1003ae2ffb545ae596377df66979d62a954d774f18009064dbe`. **Downloaded and hashed 25 Nov and twice on 26 Nov 2026 (identical)** in the agent's cloud sandbox, never installed |
 | Size | 170,246,840 bytes compressed; 458,170,160 bytes uncompressed |
 | ABI | `cp38` aarch64, matching the observed default Python 3.8.10 |
 | CUDA | Built for 11.4, matching the observed toolkit 11.4.19 / nvcc 11.4.315 |
@@ -95,30 +95,17 @@ Upstream (`70f7742`, inspected outside this repository) targets Python 3.10.14 a
 
 The alternatives (a local compatibility patch, which needs modification rights; or a non-standard Python/PyTorch build on the Xavier) are not recommended.
 
-## 3. Proposed environment installation (NOT approved, NOT executed)
+## 3. Proposed environment installation (NOT approved, NOT executed; proposed Stage 1A)
 
-Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md).
-- **Location:** venv at `/data/bowelnca/venvs/xavier-jp516-py38-torch21`, created with the system Python 3.8.
-- **Fail-closed:**
-  - `set -euo pipefail`;
-  - approval token required;
-  - read-only preconditions (not root, aarch64, L4T R35.6.4, Python 3.8 with venv, nvcc 11.4, libopenblas present, workspace owned and mode 700 on a non-root filesystem with at least 10 GiB free, no existing venv, lock/hash consistency);
-  - wheel `sha256sum --check --strict` **before** any venv exists;
-  - every pip install uses `--require-hashes --no-deps --only-binary=:all:`;
-  - the trap removes a partial venv on failure.
-- **Locks:**
-  - `env/xavier/requirements-xavier-bootstrap.lock` (pip 24.3.1);
-  - `requirements-xavier-core.lock` (torch + numpy 1.24.4 + 8 deps);
-  - `requirements-xavier-sci.lock` (49 packages + torch; separate approval).
-  - All were generated for cp38 / manylinux_2_31 aarch64, and the non-torch wheels were re-downloaded under `--require-hashes` to confirm they exist.
-- **CUDA scoping:** `CUDA_HOME`, `PATH` and `LD_LIBRARY_PATH` are set only inside the venv (`bin/bowelnca-env.sh`, sourced by `activate`). No `~/.bashrc` or system changes.
-- **Smoke test** (bounded, about seconds; not a benchmark):
-  - torch CUDA build 11.4 and `cuda.is_available()`;
-  - GPU vs CPU 1024² matmul agreement;
-  - 256 MiB GPU allocation write, readback and release, reporting peak and free memory.
-- **Footprint:** about 1.0 GB on NVMe for core, about 2 GB with the scientific stack, and about 0 on eMMC.
-- **Rollback:** delete the venv and the cache directories under `/data/bowelnca`. Nothing else changes.
-- **Possible privileged prerequisites:** if the preconditions find `python3.8-venv` or `libopenblas-dev` missing, the script aborts. Installing those requires separate approval.
+Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md). Revised after review round 3:
+- **Lifecycle (R3-04):** two distinct, versioned venvs: `xavier-jp516-py38-torch21-core-v1` (D22) and `xavier-jp516-py38-torch21-sci-v1` (D23, core + scientific stack). The sci stage needs its own approval **and** a passing core record made with the recorded core approval; both references go in the sci record. Rolling back sci never touches core.
+- **Approval boundary (R3-05):** approval references are an accidental-execution guard, not authentication. The script also requires `BOWELNCA_REVIEWED_COMMIT` to equal `HEAD` of a clean checkout; a human confirms the decision record and commit before running.
+- **Containment (R3-02):** the separated layout (D21) is required; every destination must be canonical (no symlinks), inside `/data/bowelnca`, on its filesystem and research-owned; nested mounts are refused; an exclusive `flock` prevents concurrent runs; on failure the trap removes **only the paths this invocation created**.
+- **Precondition reliability (R3-07):** command output is captured before matching (no SIGPIPE false failures under `pipefail`); free space is checked in bytes from `statfs`.
+- **Fail-closed:** wheel `sha256sum --check --strict` **before** any venv exists; every pip step `--require-hashes --no-deps --only-binary=:all:` and explicitly checked.
+- **Scoped CUDA and smoke test (R3-06):** the smoke test runs through the venv's `activate` in a clean environment, the same environment research runs will use, and records the imported torch version, CUDA build, cuDNN version, device capability and memory results. The sci stage adds pinned-version and import checks for the scientific stack.
+- **Footprint:** about 2 GB on NVMe for both venvs, about 0 on the eMMC.
+- **Possible privileged prerequisites:** if `python3.8-venv` or `libopenblas` is missing, the script aborts. Installing them needs separate approval.
 
 ## 4. Dependency compatibility and reproducibility assessment
 
@@ -127,23 +114,19 @@ Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md).
 - **Torch substitution risk:** torchio declares `torch`, so a resolver could pull a CPU-only PyPI torch. This is prevented by `--no-deps` with fully pinned locks, and by installing torch only from the verified NVIDIA file.
 - **Reproducibility:**
   - Locks pin exact versions and SHA-256 for every artefact, and the regeneration command is recorded in each `.in` file.
-  - The installer writes an environment record (approval reference, repo commit, lock hashes, `pip freeze`).
+  - `env/xavier/dependency-manifest.json` records the 51 actual wheels (filename, version, Python/ABI/platform tags, Requires-Python, size, SHA-256); CI cross-checks it against the locks.
+  - The installer writes an environment record (approval references, reviewed commit, lock hashes, smoke-test JSON, `pip freeze`).
   - Remaining non-determinism: system libraries from JetPack (CUDA, cuDNN, libopenblas) are pinned by the observed JetPack version, not by these locks.
-- **Not yet verified:** on-device import and runtime behaviour of the scientific stack. That is Stage 1 work, after approval.
+- **Not yet verified:** on-device import and runtime behaviour of the scientific stack. That is Stage 1A work, after approval.
 
 ## 5. Security and data governance (summary)
 
 Full assessment: [`docs/XAVIER_ACCESS_AND_SECURITY.md`](../docs/XAVIER_ACCESS_AND_SECURITY.md).
-- **Main risk (S1):** the research account is a sudoer. Proposed before any automated or agent execution:
-  - a separate **unprivileged execution account**, with no sudo and not in `docker` (root-equivalent);
-  - the human admin role keeps password-protected sudo;
-  - **no `NOPASSWD`**.
-- **Dataset isolation layout** for Stage 2:
-  - development data read-only to the execution account;
-  - the locked test cohort and alternate labels never on the device;
-  - manifest-checked transfers.
-- **Repository policy:** the check now also scans draft and approved evidence for private/VPN IPv4, `*.ts.net`, private IPv6, SSH key material, MACs, emails, home paths and device paths.
-- **Not published:** VPN details, hostnames, personal usernames, keys, raw logs and private correspondence.
+- **Main risk (S1):** the research account is a sudoer. **D21 (revised, R3-03):** a new administrator account with password-protected sudo (never `NOPASSWD`); the existing SSH research identity loses sudo and stays out of `docker`. Account names are kept out of the public repository.
+- **Layout:** administrator-owned `/data/bowelnca` (0750, research group, traversal only) and `datasets/` (read-only to research); research-owned 0700 execution subdirectories; `/data` unchanged.
+- **Migration:** five phases, run by the administrator; current access is preserved until the new administrator account is verified from a separate session; stop conditions and rollback at each phase. **Not executed.**
+- **Evidence (R3-10):** unapproved drafts never enter the public repository. CI rejects any `evidence-draft` path and any file marked `PENDING-HUMAN-APPROVAL`.
+- **Not published:** VPN details, hostnames, account names, keys, raw logs and private correspondence.
 
 ## 6. Upstream OctreeNCA and license
 
@@ -158,7 +141,7 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 
 | Item | State |
 |---|---|
-| Inventory evidence | Sanitized transcription in `reports/evidence-draft/` (header `REDACTION-STATUS: PENDING-HUMAN-APPROVAL`). After approval, move it to `reports/evidence/` with `REDACTED-BY-HUMAN: <initials> <date>`; CI enforces both forms |
+| Inventory evidence | Sanitized transcription, reviewed in round 3 as consistent with the owner's terminal output. **Removed from the public repository** (R3-10) and kept in private project storage until the owner attests the redaction; it then enters `reports/evidence/` with `REDACTED-BY-HUMAN: <initials> <date>`. The earlier draft commit `9c92ab7` remains in this PR branch's history; it contains no sensitive identifiers (round 3 review), so no history rewrite is proposed. A squash merge keeps it out of `main` |
 | Raw log | Kept privately by the owner; not committed |
 | Data transfer / training | **None** |
 | Privileged changes | **None by the agent.** The owner created the workspace manually with the administrator's grant (recorded as D20) |
@@ -170,47 +153,50 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | ID | Item | Status | Needed from |
 |---|---|---|---|
 | ~~B1~~ | Access and inventory | **Resolved for humans:** SSH works and the inventory is collected. The agent intentionally has no access | - |
-| E1 | Human redaction approval of the sanitized evidence | Pending | Anas (initials and date) |
-| W1 | Workspace write test and final mount/ownership verification | Pending; script ready | Anas (manual run, non-destructive) |
-| I1 | Approval to install the core environment (`--check-only` first, then install) | **Not approved** | Dr. Iyad (decision row) |
-| I2 | Approval of privileged prerequisites, only if `--check-only` reports `python3.8-venv` or `libopenblas` missing | Not requested yet | Dr. Iyad |
-| G1 | GPU/CUDA smoke test (part of I1) | **Not run** | Follows I1 |
+| E1 | Owner's redaction attestation of the sanitized evidence | Reviewer recommends acceptance; attestation pending | Anas (initials and date) |
+| W1 | Workspace check and write test (interim layout) | Pending; script ready | Anas (manual run, non-destructive) |
+| S1 / D21 | Account separation, layout and migration | **Proposed, not executed.** Prerequisite for D22 | Dr. Iyad and the device administrator |
+| D24 | Split Stage 1 into 1A (environment) and 1B (upstream reproduction) | Proposed; stage definitions unchanged until sign-off | Dr. Iyad |
+| I1 / D22 | Core environment install and CUDA smoke test (G1) | **Not approved** (proposed Stage 1A) | Dr. Iyad |
+| I2 / D23 | Scientific environment install and import checks | **Not approved**; separate from D22 | Dr. Iyad |
+| I3 | Privileged prerequisites, only if `--check-only` reports `python3.8-venv` or `libopenblas` missing | Not requested | Dr. Iyad |
 | B2 | OctreeNCA license | Inquiry sent, awaiting response; decision 16 Dec 2026 (D17) | Authors, then Anas and Dr. Iyad |
 | B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 proposed (separate environments) | Dr. Iyad |
-| S1 | Account separation before any automation | Proposed (D21) | Dr. Iyad (device owner) |
 | P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 proposed; **not started** | Dr. Iyad (scientific approval) |
-| M | Merge PR #2 (squash) | Technical GO from Anas | Dr. Iyad authorization |
+| M | Merge PR #2 (squash) | **Round 3: REQUEST CHANGES** on `9c92ab7`; this revision awaits round 4 independent review. The round 2 technical GO applied only to `878197a` | Round 4 review, then Dr. Iyad authorization |
 
 ### Stage 0 acceptance criteria (issue #1)
 
 | Criterion | Status |
 |---|---|
-| Device model, architecture, Jetson Linux release captured | **Done** (observed; evidence pending approval E1) |
-| Python, CUDA, PyTorch, `torch.cuda.is_available()` captured, including absent-import cases | **Done:** PyTorch absent, so CUDA availability is not testable until I1/G1 |
+| Device model, architecture, Jetson Linux release captured | **Done** (observed; attestation pending, E1) |
+| Python, CUDA, PyTorch, `torch.cuda.is_available()` captured, including absent-import cases | **Done:** PyTorch absent, so CUDA availability is not testable before an install |
 | Memory/storage, cooling/power noted | **Done** |
-| NVIDIA wheel checked against the observed JetPack and ABI, not installed | **Done** (on-device confirmation deferred to G1) |
+| NVIDIA wheel checked against the observed JetPack and ABI, not installed | **Done** (on-device confirmation is the Stage 1A smoke test) |
 | OctreeNCA commit identified, license recorded separately | **Done**; license **unresolved** |
-| Installation commands proposed only | **Done** (fail-closed script + locks), not executed |
+| Installation commands proposed only | **Done** (revised proposal, locks, manifest), not executed |
 | `reports/stage_0.md` with evidence and reproducibility notes | **Done** (this revision) |
-| Redacted evidence, zero raw scans, zero privileged changes by the agent | **Draft done; human approval pending (E1)** |
+| Redacted evidence, zero raw scans, zero privileged changes by the agent | **Reviewed; owner attestation pending (E1)** |
 | Workspace verified | **Pending (W1)** |
-| Next-stage gate explicitly pending | **Yes. Stage 1 NOT authorized** |
+| Next-stage gate explicitly pending | **Yes. Stage 1 (or 1A/1B) NOT authorized** |
 
-**Stage 0 is not complete.** Closing it needs E1 and W1, a decision on I1/G1 (whether the smoke test belongs in Stage 0 or opens Stage 1), and Dr. Iyad's sign-off.
+**Stage 0 is not complete.** Closing it needs E1, W1, round 4 review and Dr. Iyad's sign-off. If D24 is approved, the GPU smoke test belongs to Stage 1A and does not hold Stage 0 open; otherwise Dr. Iyad decides where it belongs.
 
 - **Reviewer sign-off (name, date, decision):** _pending - Dr. Iyad Naim_
 
 ## 9. Tests run for this revision (repository-side only)
 
-All pass locally and in CI:
-- `bash -n` and `shellcheck -S warning` on all scripts;
+All pass locally (as root and as an unprivileged user) and in CI:
+- `bash -n` and `shellcheck -S warning` on all scripts, including `scripts/lib/` and `scripts/proposed/`;
 - `scripts/check_repo_policy.sh`;
-- `tests/test_repo_policy.sh` (30 synthetic violations rejected, clean tree accepted);
+- `tests/test_repo_policy.sh` (32 synthetic violations rejected, including evidence drafts anywhere in the tree);
 - `tests/test_inventory_readonly.sh`;
 - `tests/test_inventory_guard_mutations.sh` (13 mutants rejected, none executed);
-- `tests/test_proposed_scripts.sh`: the installer refuses without approval and with a malformed token, aborts at preconditions on a non-Jetson host, `--check-only` never downloads, a checksum mismatch aborts and deletes the file, and the lock and installer hashes agree; the workspace verifier passes a correct synthetic workspace, rejects mode 755 and missing subdirectories, leaves no files, and prints no identifiers.
+- `tests/test_proposed_scripts.sh` (88 checks): refusals (no stage, approval, reviewed commit, dirty checkout); precondition failures (interim layout, sudo/docker membership, writable datasets, wrong mount or filesystem, nested mount, low space, missing libopenblas, symlinked directories and destinations); large `ldconfig` output without SIGPIPE; `--check-only` writes nothing; a concurrent run refuses; checksum failure; rollback after a failed pip step and after a failed smoke test, keeping pre-existing files; **successful simulated core and sci runs** (install order, hash locking, records with both approvals, smoke test executed through `activate` with scoped CUDA and caches, core venv unchanged by sci); lock/manifest consistency; verifier interim and separated layouts, write test skipped on failed checks, failed and short writes detected and cleaned up, no global sync, no identifiers printed.
 
-These are regression checks, not security guarantees.
+One defect was found while writing these tests: a failed pip step could be ignored when the script ran inside a caller that had disabled errexit. Every install step now aborts explicitly, and a mutation check confirmed the rollback tests fail if that is removed.
+
+These are regression checks with substituted identities and mounts, not security guarantees and not a substitute for the on-device run.
 
 ## 10. History
 
@@ -221,8 +207,9 @@ These are regression checks, not security guarantees.
   - stronger policy;
   - removal of the unverified third-party claim;
   - Python 3.8 framing.
-- **Round 2 (25 Nov, `878197a`):** technical GO for the preparatory changes, subject to Dr. Iyad's merge authorization (squash). Status updates in `e26e3db`.
-- **26 Nov:** owner completed access, inventory and workspace. This revision records the observed values and adds the locks, the installer proposal, the workspace verifier and the security assessment.
+- **Round 2 (25 Nov, `878197a`):** technical GO for the preparatory changes at that commit only (superseded by round 3), subject to Dr. Iyad's merge authorization (squash). Status updates in `e26e3db`.
+- **26 Nov (`9c92ab7`):** owner completed access, inventory and workspace. Observed values, locks, installer proposal, workspace verifier and security assessment added.
+- **Round 3 (26 Nov, `9c92ab7`):** REQUEST CHANGES, R3-01 to R3-10. The sanitized inventory was found consistent with the owner's terminal output. This revision addresses all ten items (sections 1.4, 3, 4, 5, 7, 8 and 9; D21 to D24).
 
 ## 11. Sources
 

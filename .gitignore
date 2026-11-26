@@ -108,3 +108,7 @@ Thumbs.db
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Unapproved device-evidence drafts never enter this public repository
+evidence-draft/
+evidence_draft/

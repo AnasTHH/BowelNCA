@@ -52,22 +52,28 @@ for f in "${files[@]}"; do
   if grep -qIE -- "$secret_re" "$f"; then report 'secret-like content' "$f"; fi
 done
 
-# 6. Device evidence. Two locations, both scanned for identifiers:
-#    reports/evidence-draft/  must declare "REDACTION-STATUS: PENDING-HUMAN-APPROVAL";
-#    reports/evidence/        must carry "REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>".
-#    The scan is a safety net and does not replace human redaction.
+# 6. Device evidence. Only human-approved evidence may be committed, in
+#    reports/evidence/ with "REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>".
+#    Unapproved drafts are NOT allowed anywhere in this public repository
+#    (a draft folder in a public repository is not private); they stay in
+#    private project storage until a human attests the redaction.
+#    The identifier scan is a safety net and does not replace human redaction.
+for f in "${files[@]}"; do
+  case "$f" in
+    *evidence-draft/*|*evidence_draft/*|*evidence-drafts/*)
+      report 'unapproved evidence draft in public repository (keep drafts in private storage)' "$f" ;;
+  esac
+  [ -f "$f" ] || continue
+  if head -n 5 "$f" | grep -q 'REDACTION-STATUS: PENDING-HUMAN-APPROVAL'; then
+    report 'file marked PENDING-HUMAN-APPROVAL must not be committed' "$f"
+  fi
+done
 private_ip_re='(^|[^0-9.])(10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01])|192\.168|169\.254|100\.(6[4-9]|[7-9][0-9]|1[01][0-9]|12[0-7]))\.[0-9]{1,3}\.[0-9]{1,3}([^0-9.]|$)'
 for f in "${files[@]}"; do
-  case "$f" in reports/evidence/*|reports/evidence-draft/*) ;; *) continue ;; esac
+  case "$f" in reports/evidence/*) ;; *) continue ;; esac
   [ -f "$f" ] || continue
-  case "$f" in
-    reports/evidence/*)
-      head -n 5 "$f" | grep -qE '^REDACTED-BY-HUMAN: [A-Za-z]{2,4} [0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]*$' \
-        || report 'evidence missing "REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>" header' "$f" ;;
-    reports/evidence-draft/*)
-      head -n 5 "$f" | grep -q 'REDACTION-STATUS: PENDING-HUMAN-APPROVAL' \
-        || report 'draft evidence missing "REDACTION-STATUS: PENDING-HUMAN-APPROVAL" header' "$f" ;;
-  esac
+  head -n 5 "$f" | grep -qE '^REDACTED-BY-HUMAN: [A-Za-z]{2,4} [0-9]{4}-[0-9]{2}-[0-9]{2}[[:space:]]*$' \
+    || report 'evidence missing "REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>" header' "$f"
   grep -qE "$private_ip_re" "$f" && report 'private/VPN IPv4 address in evidence' "$f"
   grep -qiE '\.ts\.net\b|\bfd7a:115c|\b(fd|fe80)[0-9a-f]{0,2}::?[0-9a-f]{1,4}:' "$f" && report 'VPN hostname or private IPv6 in evidence' "$f"
   grep -qiE '([0-9a-f]{2}:){5}[0-9a-f]{2}' "$f" && report 'MAC address in evidence' "$f"

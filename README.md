@@ -26,10 +26,10 @@ This repository starter implements the **engineering contract and read-only Stag
 
 The read-only inventory was run manually by the project owner (script commit `e26e3db`). Observed: JetPack 5.1.6, L4T R35.6.4, Python 3.8.10, CUDA 11.4, cuDNN 8.6, TensorRT 8.5; root eMMC 4.5 GiB free, NVMe `/data` 363 GiB free. The research workspace is `/data/bowelnca` (D20). See [`reports/stage_0.md`](reports/stage_0.md).
 
-1. **Evidence.** A sanitized transcription waits for human redaction approval in `reports/evidence-draft/` (header `REDACTION-STATUS: PENDING-HUMAN-APPROVAL`). After review it moves to `reports/evidence/` with the header `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`. CI enforces both headers and scans for network addresses, hostnames, home paths and key material. Raw logs stay private and git-ignored.
-2. **Workspace check (read-only):** `bash scripts/verify_workspace.sh` (add `--write-test` for a 1 MiB temp file that is verified and removed).
-3. **Installation: proposed, not approved.** [`docs/XAVIER_ENVIRONMENT.md`](docs/XAVIER_ENVIRONMENT.md) describes a hash-locked Python 3.8 venv on the NVMe using NVIDIA's JetPack 5 PyTorch wheel. The script in `scripts/proposed/` refuses to run without a recorded approval token.
-4. **Access and security:** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (account separation, groups, dataset isolation).
+1. **Evidence.** Unapproved evidence drafts never enter this public repository; they stay in private storage until a human attests the redaction. Approved evidence goes in `reports/evidence/` with the header `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`. CI rejects drafts and scans approved evidence for network addresses, hostnames, home paths and key material. Raw logs stay private.
+2. **Workspace check (non-destructive):** `bash scripts/verify_workspace.sh [--layout interim|separated] [--write-test]`.
+3. **Account separation (proposed, D21):** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (administrator and research accounts, directory layout, migration procedure).
+4. **Installation: proposed as Stage 1A, not approved.** [`docs/XAVIER_ENVIRONMENT.md`](docs/XAVIER_ENVIRONMENT.md) describes separate, versioned core and scientific venvs on the NVMe using NVIDIA's JetPack 5 PyTorch wheel and hash-locked dependencies. The script in `scripts/proposed/` refuses to run without D21 in place, recorded approval references and the reviewed commit. Approval references guard against accidental execution; they are not authentication.
 5. Obtain approval before any installation, power-mode change, firmware update, external code import or long training job.
 
 ## Explicit non-approvals
@@ -55,10 +55,11 @@ The read-only inventory was run manually by the project owner (script commit `e2
 | `scripts/check_repo_policy.sh` | Public-repo policy check (no data, weights, secrets) |
 | `scripts/verify_workspace.sh` | Non-destructive Xavier workspace verification |
 | `scripts/proposed/install_xavier_env.sh` | Proposed installer (**not approved**; refuses to run without an approval token) |
-| `env/xavier/` | Hash-locked dependency sets for the Xavier (bootstrap, core, scientific) |
+| `env/xavier/` | Hash-locked dependency sets for the Xavier (bootstrap, core, scientific) and the wheel manifest |
 | `docs/XAVIER_ENVIRONMENT.md` | Installation proposal and dependency assessment |
 | `docs/XAVIER_ACCESS_AND_SECURITY.md` | Access, security and data-governance assessment |
-| `reports/evidence-draft/` | Sanitized evidence awaiting human redaction approval |
+| `scripts/lib/workspace_checks.sh` | Shared read-only workspace and account checks |
+| `docs/proposals/STAGE_1A_1B_SPLIT.md` | Proposed Stage 1A (environment) / 1B (upstream reproduction) split |
 | `tests/` | Regression tests for the inventory script, repository policy and proposed scripts (not security guarantees) |
 | `reports/stage_0.md` | Stage 0 report (pending review) |
 | `reports/stage_0_TEMPLATE.md` | Stage 0 evidence format |

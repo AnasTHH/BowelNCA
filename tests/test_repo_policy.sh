@@ -24,8 +24,6 @@ base="$work/clean"
 new_fixture_repo "$base"
 mkdir -p "$base/reports/evidence"
 printf 'REDACTED-BY-HUMAN: AB 2026-11-25\nL4T R35 (release), REVISION: 6.4\ncuDNN 8.6.0.166 TensorRT 8.5.2.2\nfree: 15Gi\n' > "$base/reports/evidence/stage0_inventory_redacted.txt"
-mkdir -p "$base/reports/evidence-draft"
-printf 'REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nCUDA 11.4.19-1, mount /data\n' > "$base/reports/evidence-draft/draft.md"
 git -C "$base" add -A
 if ! bash "$checker" "$base" >/dev/null; then printf 'FAIL: clean fixture rejected\n'; bash "$checker" "$base" || true; fail=1; fi
 
@@ -57,7 +55,9 @@ cases=(
   'reports/evidence/key.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nssh-ed25519 AAAAC3Nza'
   'reports/evidence/badheader.txt|REDACTED-BY-HUMAN: PENDING\nL4T R35'
   'reports/evidence-draft/noheader.md|L4T R35'
-  'reports/evidence-draft/ip.md|REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nlisten 10.0.0.5'
+  'reports/evidence-draft/clean.md|REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nCUDA 11.4.19-1'
+  'docs/notes/evidence_draft/x.md|CUDA 11.4'
+  'docs/inventory_notes.md|REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nL4T R35'
   'reports/evidence/home.txt|REDACTED-BY-HUMAN: AB 2026-11-25\n/home/devuser/venv'
   'reports/evidence/dev.txt|REDACTED-BY-HUMAN: AB 2026-11-25\n/dev/mmcblk0p1 28G'
   'reports/evidence/mac.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nether 00:1b:44:11:3a:b7'
