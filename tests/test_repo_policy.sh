@@ -103,6 +103,7 @@ if ! bash "$checker" "$dir" >/dev/null 2>&1; then printf 'FAIL: public product l
 fake_id='zz-fake-device-account-41'
 mkdir -p "$work/private"
 printf '# test patterns\n%s\nzz-fake-host-[0-9]+\n' "$fake_id" > "$work/private/patterns.txt"
+chmod 700 "$work/private"; chmod 600 "$work/private/patterns.txt"
 dir="$work/private-id"
 new_fixture_repo "$dir"
 printf 'ssh %s@example\n' "$fake_id" > "$dir/docs/setup.md"
@@ -115,9 +116,11 @@ dir="$work/private-name"
 new_fixture_repo "$dir"
 printf 'x\n' > "$dir/docs/zz-fake-host-7.md"
 git -C "$dir" add -A
-if BOWELNCA_PRIVATE_PATTERNS="$work/private/patterns.txt" bash "$checker" "$dir" >/dev/null 2>&1; then
-  printf 'FAIL: private identifier in a file name accepted\n'; fail=1
-fi
+out="$(BOWELNCA_PRIVATE_PATTERNS="$work/private/patterns.txt" bash "$checker" "$dir" 2>&1)" \
+  && { printf 'FAIL: private identifier in a file name accepted\n'; fail=1; }
+# SEC-06: the identifier in the name is not reproduced in the output.
+grep -q 'zz-fake-host-7' <<<"$out" && { printf 'FAIL: private identifier in a file name printed\n'; fail=1; }
+grep -q 'private identifier in file name (pattern #2)' <<<"$out" || { printf 'FAIL: file-name identifier not reported by number\n'; fail=1; }
 # The clean fixture passes with the pattern file.
 if ! BOWELNCA_PRIVATE_PATTERNS="$work/private/patterns.txt" bash "$checker" "$base" >/dev/null 2>&1; then
   printf 'FAIL: clean fixture rejected with a private pattern file\n'; fail=1
@@ -137,5 +140,112 @@ if ! BOWELNCA_PRIVATE_PATTERNS="$work/none.txt" bash "$checker" "$base" >/dev/nu
   printf 'FAIL: optional missing pattern file rejected\n'; fail=1
 fi
 
+# ---------------------------------------------------------------------------
+# Corrections SEC-01, SEC-03, SEC-05, SEC-06, SEC-07 (synthetic fixtures only)
+pp="$work/private/patterns.txt"
+expect() {  # $1 accept|reject, $2 label, $3 dir, [rest: extra checker args before dir]
+  local want="$1" lbl="$2" dir="$3" rc=0; shift 3
+  BOWELNCA_PRIVATE_PATTERNS="$pp" bash "$checker" "$@" "$dir" >"$work/out" 2>&1 || rc=$?
+  if [ "$want" = accept ] && [ "$rc" -ne 0 ]; then printf 'FAIL: rejected %s (rc %d)\n' "$lbl" "$rc"; cat "$work/out"; fail=1; fi
+  if [ "$want" = reject ] && [ "$rc" -eq 0 ]; then printf 'FAIL: accepted %s\n' "$lbl"; fail=1; fi
+  if grep -qF -- "$fake_id" "$work/out" || grep -q 'zz-fake-host-[0-9]' "$work/out"; then
+    printf 'FAIL: private value printed (%s)\n' "$lbl"; fail=1
+  fi
+  return 0
+}
+extra=0
+
+# SEC-01: the staged content is validated, not the working tree.
+dir="$work/sec01a"; new_fixture_repo "$dir"
+printf 'see https://%s/code/session_0000TESTONLY\n' "$ai_host" > "$dir/docs/n.md"; git -C "$dir" add -A
+printf 'clean\n' > "$dir/docs/n.md"                       # working tree clean, index violating
+expect reject 'violating staged content with a clean working tree' "$dir"; extra=$((extra + 1))
+dir="$work/sec01b"; new_fixture_repo "$dir"
+printf 'clean\n' > "$dir/docs/n.md"; git -C "$dir" add -A
+printf 'ssh %s@h\n' "$fake_id" > "$dir/docs/n.md"         # index clean, working tree violating
+expect accept 'clean staged content with a violating working tree' "$dir"
+rm -f "$dir/docs/DATA_GOVERNANCE.md"                       # deleted in the working tree only
+expect accept 'file deleted in the working tree but still staged' "$dir"
+
+# --tree mode validates a commit, including an intermediate one.
+dir="$work/tree"; new_fixture_repo "$dir"
+git -C "$dir" add -A; git -C "$dir" -c user.name=T -c user.email=t@users.noreply.github.com commit -q -m base
+printf 'token ghp_%s\n' "$(printf 'a%.0s' {1..36})" > "$dir/docs/n.md"; git -C "$dir" add -A
+git -C "$dir" -c user.name=T -c user.email=t@users.noreply.github.com commit -q -m bad
+git -C "$dir" rm -q docs/n.md
+git -C "$dir" -c user.name=T -c user.email=t@users.noreply.github.com commit -q -m removed
+expect accept 'clean head commit' "$dir" --tree HEAD
+expect reject 'secret in an intermediate commit' "$dir" --tree HEAD~1; extra=$((extra + 1))
+
+# SEC-03: pattern file validation (values never printed).
+dir="$work/sec03"; new_fixture_repo "$dir"; git -C "$dir" add -A
+mkpp() { printf '%b' "$2" > "$work/private/$1"; chmod 600 "$work/private/$1"; }
+mkpp bad_re.txt "${fake_id}\nzz-(unclosed\n"
+mkpp empty_match.txt "${fake_id}\n.*\n"
+mkpp only_comments.txt "# nothing\n"
+mkpp perms.txt "${fake_id}\n"; chmod 640 "$work/private/perms.txt"
+ln -sf "$dir/docs/DATA_GOVERNANCE.md" "$work/private/link_inside.txt"
+for c in bad_re empty_match perms link_inside; do
+  rc=0; BOWELNCA_PRIVATE_PATTERNS="$work/private/$c.txt" bash "$checker" "$dir" >"$work/out" 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || { printf 'FAIL: pattern file accepted: %s\n' "$c"; fail=1; }
+  grep -qF -- "$fake_id" "$work/out" && { printf 'FAIL: pattern value printed: %s\n' "$c"; fail=1; }
+  extra=$((extra + 1))
+done
+grep -q 'invalid private pattern #2' <(BOWELNCA_PRIVATE_PATTERNS="$work/private/bad_re.txt" bash "$checker" "$dir" 2>&1 || true) \
+  || { printf 'FAIL: invalid pattern not reported by number\n'; fail=1; }
+rc=0; BOWELNCA_PRIVATE_PATTERNS="$work/private/only_comments.txt" BOWELNCA_REQUIRE_PRIVATE_PATTERNS=1 bash "$checker" "$dir" >/dev/null 2>&1 || rc=$?
+[ "$rc" -ne 0 ] || { printf 'FAIL: required pattern file without patterns accepted\n'; fail=1; }
+extra=$((extra + 1))
+if [ "$(id -u)" -ne 0 ]; then                              # root can read mode-000 files
+  mkpp unreadable.txt "${fake_id}\n"; chmod 000 "$work/private/unreadable.txt"
+  rc=0; BOWELNCA_PRIVATE_PATTERNS="$work/private/unreadable.txt" bash "$checker" "$dir" >/dev/null 2>&1 || rc=$?
+  [ "$rc" -ne 0 ] || { printf 'FAIL: unreadable pattern file accepted\n'; fail=1; }
+  chmod 600 "$work/private/unreadable.txt"; extra=$((extra + 1))
+else
+  printf 'note: unreadable-pattern-file case skipped when running as root (runs in CI)\n'
+fi
+
+# SEC-05: Git failures are errors, never a pass.
+dir="$work/sec05"; new_fixture_repo "$dir"; printf 'x\n' > "$dir/docs/n.md"; git -C "$dir" add -A
+obj="$(git -C "$dir" rev-parse :docs/n.md)"; rm -f "$dir/.git/objects/${obj:0:2}/${obj:2}"
+rc=0; bash "$checker" "$dir" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 3 ] || { printf 'FAIL: missing Git object not an error (rc %d)\n' "$rc"; fail=1; }
+rc=0; bash "$checker" --tree no-such-revision "$base" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 3 ] || { printf 'FAIL: bad revision not an error (rc %d)\n' "$rc"; fail=1; }
+rc=0; bash "$checker" "$work/private" >/dev/null 2>&1 || rc=$?
+[ "$rc" -ne 0 ] || { printf 'FAIL: non-repository accepted\n'; fail=1; }
+extra=$((extra + 3))
+
+# SEC-07: object types, names and content types.
+obj_case() {  # $1 label, $2 setup command run in the fixture
+  local dir="$work/sec07"; new_fixture_repo "$dir"; git -C "$dir" add -A
+  (cd "$dir" && eval "$2")
+  expect reject "$1" "$dir"; extra=$((extra + 1))
+}
+obj_case 'symlink' 'ln -s ../CLAUDE.md docs/link.md && git add docs/link.md'
+obj_case 'symlink to an outside path' 'ln -s /etc/passwd docs/pw.md && git add docs/pw.md'
+obj_case 'submodule (gitlink)' 'git update-index --add --cacheinfo 160000,0123456789abcdef0123456789abcdef01234567,docs/sub'
+obj_case 'file name with a space' 'printf "x\n" > "docs/a b.md" && git add -A'
+obj_case 'file name with a newline' 'printf "x\n" > "docs/a
+b.md" && git add -A'
+obj_case 'non-ASCII file name' "printf 'x\n' > 'docs/caf$(printf '\303\251').md' && git add -A"
+obj_case 'binary (NUL) content in .md hiding a secret' "printf 'a\0b ghp_%s\n' \"\$(printf 'a%.0s' {1..36})\" > docs/n.md && git add -A"
+obj_case 'binary (NUL) content in .md' "printf 'a\0b\n' > docs/n.md && git add -A"
+obj_case 'invalid UTF-8 in .md' "printf 'a\377b\n' > docs/n.md && git add -A"
+obj_case 'terminal escape sequences in .txt evidence' "mkdir -p reports/evidence && printf 'REDACTED-BY-HUMAN: AB 2026-11-25\n\033[32mOK\033[0m\n' > reports/evidence/e.txt && git add -A"
+obj_case 'text disguised as .png' 'mkdir -p docs/figures && printf "not an image\n" > docs/figures/f.png && git add -A'
+obj_case 'real .png without approval' "mkdir -p docs/figures && printf '\211PNG\r\n\032\nDATA' > docs/figures/f.png && git add -A"
+obj_case 'SVG with script' "mkdir -p docs/figures && printf '<svg><script>x</script></svg>\n' > docs/figures/f.svg && git add -A"
+# An image with a recorded human approval for its exact content is accepted;
+# changing the content after approval is rejected.
+dir="$work/sec07img"; new_fixture_repo "$dir"; mkdir -p "$dir/docs/figures"
+printf '\211PNG\r\n\032\nDATA' > "$dir/docs/figures/f.png"
+sum="$(sha256sum "$dir/docs/figures/f.png" | cut -d' ' -f1)"
+printf '# Figure approvals\n\n%s  docs/figures/f.png  APPROVED-BY-HUMAN: AB 2026-11-26\n' "$sum" > "$dir/docs/figures/PUBLICATION_APPROVALS.md"
+git -C "$dir" add -A
+expect accept 'approved .png' "$dir"
+printf '\211PNG\r\n\032\nDATA2' > "$dir/docs/figures/f.png"; git -C "$dir" add -A
+expect reject '.png changed after approval' "$dir"; extra=$((extra + 1))
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
-printf 'PASS: repository policy rejects all %d synthetic violations, the private-identifier cases and accepts clean trees\n' "${#cases[@]}"
+printf 'PASS: repository policy rejects all %d synthetic violations, the private-identifier cases and %d correction cases, and accepts clean content\n' "${#cases[@]}" "$extra"

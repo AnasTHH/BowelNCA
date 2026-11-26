@@ -18,7 +18,9 @@ trailer_key='Claude''-Session:'
 fake_id='zz-fake-device-account-41'
 mkdir -p "$work/private"
 printf '%s\n' "$fake_id" > "$work/private/patterns.txt"
+chmod 700 "$work/private"; chmod 600 "$work/private/patterns.txt"
 export BOWELNCA_PRIVATE_PATTERNS="$work/private/patterns.txt"
+unset BOWELNCA_GITLEAKS   # hermetic: the hooks use the stub scanner below
 
 new_repo() {  # $1 dir; one clean base commit by a no-reply identity
   rm -rf "$1"; mkdir -p "$1"
@@ -69,6 +71,22 @@ if bash "$checker" --message-file "$work/msg1" >/dev/null 2>&1; then bad "messag
 printf 'Fix the thing\n' > "$work/msg2"
 if bash "$checker" --message-file "$work/msg2" >/dev/null 2>&1; then ok "clean message file accepted"; else bad "clean message file rejected"; fi
 
+# SEC-05: a Git enumeration failure is an error, never "PASS: 0 commits".
+d="$work/enum"; new_repo "$d"
+rc=0; (cd "$d" && bash "$checker" no-such-rev..main >/dev/null 2>&1) || rc=$?
+[ "$rc" -eq 3 ] && ok "invalid revision range is an error" || bad "invalid revision range not an error (rc $rc)"
+printf 'deadbeef\n' > "$work/badlist"
+rc=0; (cd "$d" && bash "$checker" --commits "$work/badlist" >/dev/null 2>&1) || rc=$?
+[ "$rc" -eq 3 ] && ok "unknown commit in a commit list is an error" || bad "unknown commit in a commit list not an error (rc $rc)"
+# SEC-03: the message checker validates the pattern file like the policy does.
+printf '%s\nzz-(unclosed\n' "$fake_id" > "$work/private/bad_msg.txt"; chmod 600 "$work/private/bad_msg.txt"
+if out="$(BOWELNCA_PRIVATE_PATTERNS="$work/private/bad_msg.txt" bash "$checker" --message-file "$work/msg2" 2>&1)"; then bad "invalid private pattern accepted by the message checker"; else ok "message checker rejects an invalid private pattern"; fi
+grep -qF -- "$fake_id" <<<"$out" && bad "message checker printed a pattern value"
+cp "$work/private/patterns.txt" "$work/private/open.txt"; chmod 644 "$work/private/open.txt"
+if BOWELNCA_PRIVATE_PATTERNS="$work/private/open.txt" bash "$checker" --message-file "$work/msg2" >/dev/null 2>&1; then bad "readable-by-others pattern file accepted by the message checker"; else ok "message checker rejects a pattern file readable by others"; fi
+mkdir -p "$d/cfg"; cp "$work/private/patterns.txt" "$d/cfg/p.txt"
+if (cd "$d" && BOWELNCA_PRIVATE_PATTERNS="$d/cfg/p.txt" bash "$checker" main~1..main >/dev/null 2>&1); then bad "pattern file inside the repository accepted by the message checker"; else ok "message checker rejects a pattern file inside the repository"; fi
+
 # Hooks, with a stub gitleaks. The hooks run in a copy of the scripts so the
 # repository root they resolve is the fixture repository.
 stub_bin="$work/bin"; mkdir -p "$stub_bin"
@@ -80,15 +98,17 @@ EOF
 chmod +x "$stub_bin/gitleaks"
 export GITLEAKS_STUB_LOG="$work/gitleaks.log"
 
-hook_repo() {  # $1 dir: fixture repo that passes the repository policy, hooks installed
-  new_repo "$1"
-  mkdir -p "$1/scripts/hooks" "$1/docs"
+hook_repo() {  # $1 dir: fixture repo whose every commit passes the policy, hooks installed
+  rm -rf "$1"; mkdir -p "$1/scripts/hooks" "$1/scripts/lib" "$1/docs"
+  git -C "$1" init -q -b main
+  git -C "$1" config user.name 'Test'
+  git -C "$1" config user.email 'test@users.noreply.github.com'
   cp "$repo_root/scripts/check_repo_policy.sh" "$repo_root/scripts/check_commit_messages.sh" "$1/scripts/"
+  cp "$repo_root/scripts/lib/publication_checks.sh" "$1/scripts/lib/"
   cp "$repo_root/scripts/hooks/"* "$1/scripts/hooks/"
   printf 'x\n' > "$1/CLAUDE.md"; printf 'x\n' > "$1/docs/DEVELOPMENT_PLAN_v1.2.md"
   printf 'x\n' > "$1/docs/DATA_GOVERNANCE.md"; printf 'x\n' > "$1/.gitignore"; printf 'x\n' > "$1/.gitleaks.toml"
-  git -C "$1" rm -q --cached a.txt && rm -f "$1/a.txt"
-  git -C "$1" add -A && git -C "$1" commit -q -m 'fixture layout'
+  git -C "$1" add -A && git -C "$1" -c core.hooksPath=/dev/null commit -q -m 'fixture layout'
   git -C "$1" config core.hooksPath scripts/hooks
 }
 
@@ -110,6 +130,11 @@ if GITLEAKS_STUB_FAIL="$work/leak" PATH="$stub_bin:$PATH" git -C "$d" commit -q 
 printf 'ssh %s@h\n' "$fake_id" > "$d/docs/n.md"; git -C "$d" add -A
 if PATH="$stub_bin:$PATH" git -C "$d" commit -q -m "More" 2>/dev/null; then bad "pre-commit allowed a private identifier"; else ok "pre-commit blocks a private identifier"; fi
 git -C "$d" reset -q --hard
+# SEC-01: pre-commit validates the staged content, not the working tree.
+printf 'see https://%s/code/session_0000TESTONLY\n' "$ai_host" > "$d/docs/n.md"; git -C "$d" add -A
+printf 'clean\n' > "$d/docs/n.md"
+if PATH="$stub_bin:$PATH" git -C "$d" commit -q -m "More" 2>/dev/null; then bad "pre-commit allowed violating staged content behind a clean working tree"; else ok "pre-commit checks the staged content, not the working tree"; fi
+git -C "$d" reset -q --hard
 
 # pre-push: push to a bare remote; scans exactly the new commits.
 remote="$work/remote.git"; git init -q --bare "$remote"
@@ -126,6 +151,77 @@ grep -qF 'session_0000TESTONLY' <<<"$out" && bad "pre-push printed the private l
 # pre-push fails closed without gitleaks.
 git -C "$d" -c core.hooksPath=/dev/null commit -q --amend -m "Clean message"
 if BOWELNCA_GITLEAKS="$work/missing-gitleaks" git -C "$d" push -q origin main 2>/dev/null; then bad "pre-push passed without gitleaks"; else ok "pre-push fails closed without gitleaks"; fi
+
+# ---------------------------------------------------------------------------
+# SEC-02 / SEC-04: pre-push validates every commit that is new to the
+# destination, for every pushed ref, against the destination's own refs.
+fresh_push_repo() {  # $1 dir: hook repo whose main is already on a bare "origin"
+  hook_repo "$1"
+  git init -q --bare "$1.remote.git"
+  git -C "$1" remote add origin "$1.remote.git"
+  PATH="$stub_bin:$PATH" git -C "$1" push -q origin main >/dev/null 2>&1 || bad "setup push failed: $1"
+}
+nh() { local r="$1"; shift; git -C "$r" -c core.hooksPath=/dev/null "$@"; }   # bypass commit-time hooks only
+hpush() { local r="$1"; shift; PATH="$stub_bin:$PATH" git -C "$r" push -q "$@" 2>&1; }
+
+# Prohibited content introduced and removed again before the push.
+d2="$work/inter"; fresh_push_repo "$d2"
+mkdir -p "$d2/data/raw_dev"; printf 'x\n' > "$d2/data/raw_dev/case01.txt"
+nh "$d2" add -A; nh "$d2" commit -q -m "Add file"
+nh "$d2" rm -q -r data; nh "$d2" commit -q -m "Remove file"
+if out="$(hpush "$d2" origin main)"; then bad "pre-push allowed prohibited content in an intermediate commit"; elif ! grep -q 'FAIL restricted directory' <<<"$out"; then bad "intermediate commit blocked for the wrong reason"; else ok "pre-push blocks prohibited content added and removed in an intermediate commit"; fi
+[ "$(git -C "$d2.remote.git" rev-parse main)" != "$(git -C "$d2" rev-parse main)" ] || bad "intermediate-commit violation reached the remote"
+
+# Private identifier present only in an intermediate commit.
+d3="$work/inter-id"; fresh_push_repo "$d3"
+printf 'ssh %s@h\n' "$fake_id" > "$d3/docs/n.md"; nh "$d3" add -A; nh "$d3" commit -q -m "Add note"
+printf 'clean\n' > "$d3/docs/n.md"; nh "$d3" add -A; nh "$d3" commit -q -m "Clean note"
+if out="$(hpush "$d3" origin main)"; then bad "pre-push allowed a private identifier in an intermediate commit"; elif ! grep -q 'FAIL private identifier (pattern #1)' <<<"$out"; then bad "intermediate identifier blocked for the wrong reason"; else ok "pre-push blocks a private identifier present only in an intermediate commit"; fi
+grep -qF -- "$fake_id" <<<"$out" && bad "pre-push printed the private identifier"
+
+# Pushing a ref other than the checked-out branch.
+d4="$work/otherref"; fresh_push_repo "$d4"
+nh "$d4" checkout -q -b side
+printf 'see https://%s/code/session_0000TESTONLY\n' "$ai_host" > "$d4/docs/n.md"; nh "$d4" add -A; nh "$d4" commit -q -m "Side note"
+nh "$d4" checkout -q main                                   # checked-out branch and working tree are clean
+if out="$(hpush "$d4" origin side)"; then bad "pre-push allowed a violating ref that is not checked out"; elif ! grep -q 'FAIL private AI-assistant link' <<<"$out"; then bad "non-checked-out ref blocked for the wrong reason"; else ok "pre-push blocks a violating ref other than the checked-out branch"; fi
+if hpush "$d4" origin side:refs/heads/renamed >/dev/null; then bad "pre-push allowed a violating ref under another name"; else ok "pre-push blocks a violating ref pushed under another name"; fi
+nh "$d4" branch -q clean2 main; printf 'ok\n' > "$d4/docs/ok.md"
+nh "$d4" checkout -q side                                   # violating content checked out
+if hpush "$d4" origin clean2 >/dev/null; then ok "pre-push allows a clean ref while a violating branch is checked out"; else bad "pre-push judged the working tree instead of the pushed ref"; fi
+rm -f "$d4/docs/ok.md"
+
+# SEC-04: commits already on ANOTHER remote are still new to this destination.
+d5="$work/tworemotes"; fresh_push_repo "$d5"
+git init -q --bare "$d5.other.git"; git -C "$d5" remote add other "$d5.other.git"
+nh "$d5" checkout -q -b feature
+printf 'n\n' > "$d5/docs/n.md"; nh "$d5" add -A
+nh "$d5" commit -q -m "Note https://${ai_host}/code/session_0000TESTONLY"
+nh "$d5" push -q other feature 2>/dev/null                  # published elsewhere without the hooks
+nh "$d5" fetch -q other
+if out="$(hpush "$d5" origin feature)"; then bad "pre-push skipped commits known only to another remote"; elif ! grep -q 'FAIL private AI-assistant link or session trailer: commit' <<<"$out"; then bad "other-remote commit blocked for the wrong reason"; else ok "pre-push checks commits known to another remote but new to the destination"; fi
+
+# Fail closed: destination refs unavailable, pattern file missing or invalid, shallow clone.
+head_sha="$(git -C "$d5" rev-parse main)"
+if (cd "$d5" && printf 'refs/heads/x %s refs/heads/x %040d\n' "$head_sha" 0 \
+      | PATH="$stub_bin:$PATH" bash scripts/hooks/pre-push origin "$work/no-such-remote.git" >/dev/null 2>&1); then
+  bad "pre-push passed when the destination's refs could not be listed"
+else ok "pre-push fails closed when the destination's refs cannot be listed"; fi
+nh "$d5" checkout -q main; printf 'm\n' > "$d5/docs/m.md"; nh "$d5" add -A; nh "$d5" commit -q -m "More"
+if BOWELNCA_PRIVATE_PATTERNS="$work/none.txt" hpush "$d5" origin main >/dev/null; then bad "pre-push passed without the private pattern file"; else ok "pre-push fails closed without the private pattern file"; fi
+printf 'zz-(unclosed\n' > "$work/private/bad.txt"; chmod 600 "$work/private/bad.txt"
+if BOWELNCA_PRIVATE_PATTERNS="$work/private/bad.txt" hpush "$d5" origin main >/dev/null; then bad "pre-push passed with an invalid private pattern"; else ok "pre-push fails closed on an invalid private pattern"; fi
+chmod 644 "$work/private/patterns.txt"
+if hpush "$d5" origin main >/dev/null; then bad "pre-push passed with a group/world-readable pattern file"; else ok "pre-push fails closed on a pattern file readable by others"; fi
+chmod 600 "$work/private/patterns.txt"
+if hpush "$d5" origin main >/dev/null; then ok "pre-push allows a clean push"; else bad "pre-push blocked a clean push"; fi
+[ "$(git -C "$d5.remote.git" rev-parse main)" = "$(git -C "$d5" rev-parse main)" ] || bad "clean push did not reach the remote"
+git clone -q --depth 1 --branch main "file://$d5.remote.git" "$work/shallow" 2>/dev/null
+git -C "$work/shallow" config user.email 'test@users.noreply.github.com'; git -C "$work/shallow" config core.hooksPath scripts/hooks
+printf 's\n' > "$work/shallow/docs/s.md"; nh "$work/shallow" add -A; nh "$work/shallow" commit -q -m "Shallow"
+if hpush "$work/shallow" origin main >/dev/null; then bad "pre-push passed in a shallow clone"; else ok "pre-push fails closed in a shallow clone"; fi
+# Branch deletion publishes nothing new and passes.
+if hpush "$d4" origin --delete clean2 >/dev/null; then ok "pre-push allows a branch deletion"; else bad "pre-push blocked a branch deletion"; fi
 
 if [ "$fail" -ne 0 ]; then exit 1; fi
 printf 'PASS: commit-message checks and git hooks\n'

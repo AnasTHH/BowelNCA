@@ -1,30 +1,71 @@
 #!/usr/bin/env bash
-# pre-push hook: before anything becomes public, scan every commit being
-# pushed with gitleaks (redacted) and the commit-message/identity check, and
-# run the repository policy on the working tree. Fails closed if gitleaks is
-# missing. Install with scripts/install_git_hooks.sh.
+# pre-push hook: before anything reaches the destination, validate EVERY
+# commit that the destination does not already have, for every ref being
+# pushed (not only the checked-out branch):
+#   - gitleaks on each new commit's changes (redacted output);
+#   - commit messages, tag messages and author/committer identities;
+#   - the repository policy on each new commit's full tree, including
+#     private identifiers, so content added and later removed is caught.
+# "New" is computed against the refs the destination itself reports
+# (git ls-remote), not against remote-tracking refs of any remote. It fails
+# closed when gitleaks, the private pattern file or the destination's refs
+# are unavailable, in a shallow clone, or when any Git command fails.
+# Install with scripts/install_git_hooks.sh. Defence in depth only: a hook
+# can be bypassed and does not replace review (see SECURITY.md).
 set -euo pipefail
+[ "${BASH_VERSINFO[0]:-0}" -ge 4 ] || { echo "pre-push: bash 4 or newer is required" >&2; exit 1; }
 root="$(git rev-parse --show-toplevel)"
+dest_url="${2:?pre-push: destination URL missing}"
 gitleaks_bin="${BOWELNCA_GITLEAKS:-gitleaks}"
 command -v "$gitleaks_bin" >/dev/null 2>&1 \
   || { echo "pre-push: gitleaks not found; install it (see SECURITY.md) or set BOWELNCA_GITLEAKS" >&2; exit 1; }
 export BOWELNCA_REQUIRE_PRIVATE_PATTERNS="${BOWELNCA_REQUIRE_PRIVATE_PATTERNS:-1}"
-zero='0000000000000000000000000000000000000000'
-status=0
-while read -r _local_ref local_sha _remote_ref remote_sha; do
-  [ "$local_sha" = "$zero" ] && continue            # branch deletion: nothing new is published
-  if [ "$remote_sha" = "$zero" ]; then
-    range="$local_sha --not --remotes"              # new branch: commits not yet on any remote
-  else
-    range="$remote_sha..$local_sha"
-  fi
-  # shellcheck disable=SC2086  # range intentionally splits into rev-list arguments
-  if [ -n "$(git rev-list $range)" ]; then
-    "$gitleaks_bin" git --redact --no-banner --config "$root/.gitleaks.toml" --log-opts="$range" "$root" || status=1
-    # shellcheck disable=SC2086
-    bash "$root/scripts/check_commit_messages.sh" $range || status=1
-  fi
+block() { echo "pre-push: blocked: $1" >&2; exit 1; }
+tmp="$(mktemp -d)" || block 'mktemp failed'
+trap 'rm -rf "$tmp"' EXIT
+
+[ "$(git rev-parse --is-shallow-repository)" = false ] || block 'shallow clone; full history cannot be established'
+
+# Read all ref updates first, so no later command consumes the hook's stdin.
+updates=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  updates+=("$local_ref $local_sha $remote_ref $remote_sha")
 done
-bash "$root/scripts/check_repo_policy.sh" "$root" || status=1
-[ "$status" -eq 0 ] || echo "pre-push: blocked; fix the findings above before publishing" >&2
-exit "$status"
+
+# Objects the destination already has, according to the destination itself.
+git ls-remote -- "$dest_url" > "$tmp/dest_refs" </dev/null 2>/dev/null \
+  || block "cannot list the destination's refs, so the new commits cannot be determined"
+: > "$tmp/exclude"
+while read -r oid _ref; do
+  if git cat-file -e "${oid}^{commit}" 2>/dev/null; then printf '^%s\n' "$oid" >> "$tmp/exclude"; fi
+done < "$tmp/dest_refs"
+
+zero='0000000000000000000000000000000000000000'
+: > "$tmp/all"
+for u in "${updates[@]}"; do
+  read -r _lref local_sha _rref _rsha <<<"$u"
+  [ "$local_sha" = "$zero" ] && continue          # deletion: nothing new is published
+  type="$(git cat-file -t "$local_sha" 2>/dev/null)" || block "cannot read pushed object ${local_sha:0:12}"
+  if [ "$type" = tag ]; then                      # annotated tag: check its message too
+    git cat-file tag "$local_sha" > "$tmp/tag" || block 'cannot read tag object'
+    awk 'f{print} /^$/{f=1}' "$tmp/tag" > "$tmp/tagmsg" || block 'cannot parse tag object'
+    bash "$root/scripts/check_commit_messages.sh" --message-file "$tmp/tagmsg" </dev/null \
+      || block "tag message of ${local_sha:0:12} failed the check"
+  fi
+  { printf '%s\n' "$local_sha"; cat "$tmp/exclude"; } > "$tmp/revs" || block 'cannot build the revision list'
+  git rev-list --stdin < "$tmp/revs" >> "$tmp/all" 2>/dev/null || block 'git rev-list failed'
+done
+sort -u "$tmp/all" > "$tmp/commits" || block 'sort failed'
+n="$(wc -l < "$tmp/commits" | tr -d ' ')"
+[ "$n" -gt 0 ] || { echo "pre-push: no new commits for this destination"; exit 0; }
+echo "pre-push: checking $n new commit(s) for this destination"
+
+status=0
+bash "$root/scripts/check_commit_messages.sh" --commits "$tmp/commits" </dev/null || status=1
+while IFS= read -r c; do
+  "$gitleaks_bin" git --redact --no-banner --config "$root/.gitleaks.toml" \
+    --log-opts="--no-walk $c" "$root" </dev/null || status=1
+  bash "$root/scripts/check_repo_policy.sh" --tree "$c" "$root" </dev/null >"$tmp/policy" || { status=1; cat "$tmp/policy"; }
+done < "$tmp/commits"
+[ "$status" -eq 0 ] || block 'fix the findings above before publishing'
+echo "pre-push: PASS ($n commit(s), messages, identities, secrets and policy per commit)"
