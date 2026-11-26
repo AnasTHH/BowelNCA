@@ -1,6 +1,6 @@
 # Stage 0 - Xavier system and compatibility report
 
-**Date (UTC):** 2026-11-26 (revision 6, after review round 4 and W1; first drafted 2026-11-25)
+**Date (UTC):** 2026-11-26 (revision 7, after the final Stage 0 engineering review; first drafted 2026-11-25)
 **Device owner/reviewer:** Dr. Iyad Naim
 **Engineer:** Claude Code (lead implementation agent), for Anas
 **Git commit:** head of PR #2 (see PR for the exact SHA and CI run)
@@ -17,7 +17,7 @@
 | Research workspace | **Verified in the interim layout (W1 PASSED,** 2026-11-26T08:40:33Z, commit `73dbac6`, 0 FAIL, 2 expected WARN). The administrator-owned separated layout (D21) is proposed and needs its own verification | Section 1.4; `scripts/verify_workspace.sh` |
 | PyTorch wheel | **Re-verified 26 Nov:** NVIDIA `torch 2.1.0a0+41361538.nv23.06`, cp38, CUDA 11.4, SHA-256 unchanged. Matches the observed JetPack 5.1.6 / Python 3.8.10 / CUDA 11.4 / cuDNN 8.6. Compatibility on 5.1.6 is **inferred until the smoke test runs** | Section 2 |
 | Dependencies | **Hash-locked** for cp38/aarch64. A machine-readable manifest records all 51 actual wheels (filename, version, tags, Requires-Python, SHA-256). All binary wheels; no compilation needed | `env/xavier/dependency-manifest.json`, `docs/XAVIER_ENVIRONMENT.md` |
-| Installation | **Proposal revised, NOT approved, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 88 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
+| Installation | **Proposal revised, NOT approved, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 122 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
 | GPU / CUDA functionality | **Not tested.** PyTorch is not installed | - |
 | OctreeNCA license | **Unresolved (B2).** Inquiry sent 25 Nov 2026, awaiting response; decision point 16 Dec 2026 (D17) | `docs/UPSTREAM_LICENSE_REVIEW.md` |
 | Security | Account separation (D21) with directory layout and a migration procedure that preserves current access; **no changes made** | `docs/XAVIER_ACCESS_AND_SECURITY.md` |
@@ -117,6 +117,7 @@ Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md). R
 - **Precondition reliability (R3-07):** command output is captured before matching (no SIGPIPE false failures under `pipefail`); free space is checked in bytes from `statfs`.
 - **Fail-closed:** wheel `sha256sum --check --strict` **before** any venv exists; every pip step `--require-hashes --no-deps --only-binary=:all:` and explicitly checked.
 - **Scoped CUDA and smoke test (R3-06):** the smoke test runs through the venv's `activate` in a clean environment, the same environment research runs will use, and records the imported torch version, CUDA build, cuDNN version, device capability and memory results. The sci stage adds pinned-version and import checks for the scientific stack.
+- **Installed-version check (final review):** after installation, `verify_installed_versions.py` reads every installed distribution with `importlib.metadata` and compares it, PEP 440 normalized, with `env/xavier/dependency-manifest.json` (bootstrap + the stage's lock). `pip freeze` is recorded as evidence only, because a wheel installed from a local file appears as a PEP 610 direct reference.
 - **Round 4 (R4-01 to R4-03):** the lock file is validated before opening (symlinks, dangling symlinks, other file types, wrong owner and extra hard links refused); the record is created exclusively and a dangling symlink there is refused; failure to read the mount table fails closed; venv creation and pip run in a controlled environment (`env -i`, `python -I`, `PIP_CONFIG_FILE=/dev/null`); every hook write and all evidence (lock hashes, smoke JSON, `pip freeze`) must succeed before `result: pass`; failed runs keep private diagnostics on the device. These are filesystem safeguards, **not a security sandbox**.
 - **Footprint:** about 2 GB on NVMe for both venvs, about 0 on the eMMC.
 - **Possible privileged prerequisites:** if `python3.8-venv` or `libopenblas` is missing, the script aborts. Installing them needs separate approval.
@@ -158,8 +159,11 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | Inventory evidence | Sanitized transcription, reviewed in round 3 as consistent with the owner's terminal output. **Removed from the public repository** (R3-10) and kept in private project storage until the owner attests the redaction; it then enters `reports/evidence/` with `REDACTED-BY-HUMAN: <initials> <date>`. The earlier draft commit `9c92ab7` remains in this PR branch's history; it contains no sensitive identifiers (round 3 review), so no history rewrite is proposed. A squash merge keeps it out of `main` |
 | Raw log | Kept privately by the owner; not committed |
 | Data transfer / training | **None** |
-| Privileged changes | **None by the agent.** The owner created the workspace manually with the administrator's grant (recorded as D20) |
-| Agent actions on any device | **None** |
+| Read-only inventory (Stage 0 scope) | Run by the owner, unprivileged, with the reviewed script at `e26e3db`. Read-only; no sudo |
+| Owner's authorized administrative setup | **Separate from the inventory and outside the agent's boundaries.** With the device administrator's grant, the owner created `/data/bowelnca` and its nine subdirectories (D20) and, before W1, normalized them to mode 0700. These were manual, authorized administrative actions by a human on the project workspace only; `/data` was not changed |
+| Workspace verification (W1) | Run by the owner, unprivileged; non-destructive (one 1 MiB temp file, removed) |
+| Agent execution boundary | **Unchanged.** The agent has no access to the Xavier, ran nothing on it, and made no privileged, account, permission or system change anywhere. Its work is limited to this repository and its cloud sandbox |
+| Privileged changes by the agent | **None** |
 | Earlier incident (25 Nov) | A test-design bug ran an injected mutant in the agent's cloud sandbox only. Fixed; covered by the mutation test (section 9) |
 
 ## 8. Blockers, outstanding work and approvals
@@ -207,7 +211,7 @@ All pass locally (as root and as an unprivileged user) and in CI:
 - `tests/test_repo_policy.sh` (32 synthetic violations rejected, including evidence drafts anywhere in the tree);
 - `tests/test_inventory_readonly.sh`;
 - `tests/test_inventory_guard_mutations.sh` (13 mutants rejected, none executed);
-- `tests/test_proposed_scripts.sh` (114 checks; round 4 added lock-file validation (symlink, dangling symlink, directory, FIFO, wrong owner, hard link), mount-enumeration failure, a dangling symlink at the record destination, a hostile inherited environment (`PYTHONPATH`, `PYTHONHOME`, `PIP_TARGET`, `PIP_PREFIX`, `PIP_USER`, `PIP_INDEX_URL`, `PIP_CONFIG_FILE`), and failures of the env hook, `pip freeze`, the smoke JSON and lock hashing, each with rollback and retained private diagnostics): refusals (no stage, approval, reviewed commit, dirty checkout); precondition failures (interim layout, sudo/docker membership, writable datasets, wrong mount or filesystem, nested mount, low space, missing libopenblas, symlinked directories and destinations); large `ldconfig` output without SIGPIPE; `--check-only` writes nothing; a concurrent run refuses; checksum failure; rollback after a failed pip step and after a failed smoke test, keeping pre-existing files; **successful simulated core and sci runs** (install order, hash locking, records with both approvals, smoke test executed through `activate` with scoped CUDA and caches, core venv unchanged by sci); lock/manifest consistency; verifier interim and separated layouts, write test skipped on failed checks, failed and short writes detected and cleaned up, no global sync, no identifiers printed.
+- `tests/test_proposed_scripts.sh` (122 checks; the final review added installed-version verification against the manifest and a direct-reference `pip freeze` case; round 4 added lock-file validation (symlink, dangling symlink, directory, FIFO, wrong owner, hard link), mount-enumeration failure, a dangling symlink at the record destination, a hostile inherited environment (`PYTHONPATH`, `PYTHONHOME`, `PIP_TARGET`, `PIP_PREFIX`, `PIP_USER`, `PIP_INDEX_URL`, `PIP_CONFIG_FILE`), and failures of the env hook, `pip freeze`, the smoke JSON and lock hashing, each with rollback and retained private diagnostics): refusals (no stage, approval, reviewed commit, dirty checkout); precondition failures (interim layout, sudo/docker membership, writable datasets, wrong mount or filesystem, nested mount, low space, missing libopenblas, symlinked directories and destinations); large `ldconfig` output without SIGPIPE; `--check-only` writes nothing; a concurrent run refuses; checksum failure; rollback after a failed pip step and after a failed smoke test, keeping pre-existing files; **successful simulated core and sci runs** (install order, hash locking, records with both approvals, smoke test executed through `activate` with scoped CUDA and caches, core venv unchanged by sci); lock/manifest consistency; verifier interim and separated layouts, write test skipped on failed checks, failed and short writes detected and cleaned up, no global sync, no identifiers printed.
 
 One defect was found while writing these tests: a failed pip step could be ignored when the script ran inside a caller that had disabled errexit. Every install step now aborts explicitly, and a mutation check confirmed the rollback tests fail if that is removed.
 
@@ -226,6 +230,7 @@ These are regression checks with substituted identities and mounts, not security
 - **26 Nov (`9c92ab7`):** owner completed access, inventory and workspace. Observed values, locks, installer proposal, workspace verifier and security assessment added.
 - **Round 3 (26 Nov, `9c92ab7`):** REQUEST CHANGES, R3-01 to R3-10. The sanitized inventory was found consistent with the owner's terminal output. Addressed in `73dbac6`.
 - **Round 4 (26 Nov, `73dbac6`):** CONDITIONAL GO with targeted corrections R4-01 to R4-04; account names stay private; no history rewrite. W1 passed the same day. This revision applies R4-01 to R4-04, records W1 and D20 (interim), and records Anas's recommendation to approve D19.
+- **Final Stage 0 engineering review (26 Nov, `87858b6`):** Technical GO for the preparatory repository changes, subject to the owner's redaction attestation (E1) and Dr. Iyad's merge authorization; **no installation authorization**. One pre-installation correction: verify installed versions with `importlib.metadata` against the manifest instead of parsing `pip freeze` (a local wheel is listed as `torch @ file:///...`). Done in this revision, with regression tests; `pip freeze` is kept as evidence.
 
 ## 11. Sources
 

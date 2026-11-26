@@ -75,6 +75,11 @@ venv_py="$work/venv_python"
 cat > "$venv_py" <<EOF
 #!/bin/sh
 [ "\$1" = "-I" ] && shift
+case "\$1" in
+  *verify_installed_versions.py)
+    if [ -f "$state/version_mismatch" ]; then echo '{"result": "fail", "problems": {"torch": {"have": "2.1.0", "want": "2.1.0a0+41361538.nv23.06"}}}'; exit 1; fi
+    echo '{"checked": 10, "result": "pass", "torch": "2.1.0a0+41361538.nv23.06"}'; exit 0 ;;
+esac
 if [ "\$1" = "-m" ] && [ "\$2" = "pip" ]; then
   case "\$3" in
     install)
@@ -89,7 +94,10 @@ if [ "\$1" = "-m" ] && [ "\$2" = "pip" ]; then
       mkdir -p "\$(dirname "\$0")/../lib/fake-site" && echo \$n > "\$(dirname "\$0")/../lib/fake-site/pkg\$n"
       exit 0 ;;
     check) echo check >> "$state/pip.log"; exit 0 ;;
-    freeze) [ -f "$state/fail_freeze" ] && exit 1; echo "torch==2.1.0a0+41361538.nv23.06"; echo "numpy==1.24.4"; exit 0 ;;
+    freeze) [ -f "$state/fail_freeze" ] && exit 1
+      if [ -f "$state/freeze_direct" ]; then echo "torch @ file:///data/bowelnca/tmp/torch-dl.X/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl"
+      else echo "torch==2.1.0a0+41361538.nv23.06"; fi
+      echo "numpy==1.24.4"; exit 0 ;;
   esac
 fi
 out=""; stage=""; prev=""
@@ -120,6 +128,8 @@ fake_hash="$(printf 'fake wheel\n' | sha256sum | cut -d' ' -f1)"
 real_hash="$(sed -n 's/^TORCH_SHA256="\([0-9a-f]\{64\}\)"$/\1/p' "$installer")"
 locks="$work/locks"; mkdir -p "$locks"
 for l in "$repo_root"/env/xavier/*.lock; do sed "s/$real_hash/$fake_hash/" "$l" > "$locks/$(basename "$l")"; done
+fake_manifest="$work/dependency-manifest.json"
+sed "s/$real_hash/$fake_hash/" "$repo_root/env/xavier/dependency-manifest.json" > "$fake_manifest"
 fake_repo="$work/repo"; mkdir -p "$fake_repo"
 git -C "$fake_repo" init -q
 printf 'x\n' > "$fake_repo/README"
@@ -177,6 +187,7 @@ run_inst() {
     . "$installer"
     ROOT="$WS"; EXPECTED_MOUNT="$data"; TEGRA_RELEASE_FILE="$tegra"; CUDA_HOME_DIR="$fake_cuda"
     PYTHON3="$fake_py3"; CURL="$stubs/curl"; REPO_DIR="$fake_repo"; LOCK_DIR="$locks"; TORCH_SHA256="$fake_hash"
+    MANIFEST="$fake_manifest"
     TORCH_URL="https://example.invalid/torch.whl"
     fake_system "${FAKE_LAYOUT_RUN:-separated}"
     main "$@"
@@ -366,6 +377,51 @@ fail_case "aborts when the env hook cannot be written" 'environment hook' activa
 fail_case "aborts when pip freeze fails" 'pip freeze failed' fail_freeze
 fail_case "aborts when the smoke result is missing" 'smoke result missing' smoke_nojson
 fail_case "aborts when lock hashing fails" 'hash the lock files' fail_locksum
+fail_case "aborts when installed versions do not match the manifest" 'do not match the dependency manifest' version_mismatch
+
+# A direct-reference freeze entry (PEP 610, "torch @ file:///...") is valid evidence, not a failure.
+reset_state; make_ws separated; touch "$state/freeze_direct"
+if out="$( (core_env; run_inst --stage core) 2>&1)"; then
+  rec="$(ls "$WS"/reports/env-core-*.txt | head -n 1)"
+  grep -q '^freeze: torch @ file:///' "$rec" && grep -q '^installed_versions: {.*"result": "pass"' "$rec" \
+    && [ "$(tail -n 1 "$rec")" = "result: pass" ] \
+    && ok "direct-reference freeze output accepted; versions verified via importlib.metadata" \
+    || bad "direct-reference record incomplete"
+else bad "install rejected a direct-reference freeze entry: $(tail -n 3 <<<"$out")"; fi
+
+# verify_installed_versions.py against synthetic dist-info metadata (real python3).
+vpy="$repo_root/scripts/proposed/verify_installed_versions.py"
+mksite() {  # mksite DIR TORCH_VERSION_OR_EMPTY
+  rm -rf "$1"; mkdir -p "$1"
+  python3 -I - "$repo_root/env/xavier/dependency-manifest.json" "$1" "$2" <<'PY'
+import json, os, sys
+man, site, torch_v = sys.argv[1], sys.argv[2], sys.argv[3]
+for w in json.load(open(man))["wheels"]:
+    if not ({"bootstrap", "core"} & set(w["locks"])):
+        continue
+    v = w["version"]
+    if w["name"] == "torch":
+        if not torch_v:
+            continue
+        v = torch_v
+    d = os.path.join(site, "%s-%s.dist-info" % (w["name"].replace("-", "_"), v))
+    os.makedirs(d)
+    open(os.path.join(d, "METADATA"), "w").write("Metadata-Version: 2.1\nName: %s\nVersion: %s\n" % (w["name"], v))
+PY
+}
+site="$work/site"; man_real="$repo_root/env/xavier/dependency-manifest.json"
+mksite "$site" "2.1.0a0+41361538.nv23.06"
+python3 -I "$vpy" --manifest "$man_real" --stage core --site "$site" >/dev/null \
+  && ok "version verifier passes exact manifest versions" || bad "version verifier rejected exact versions"
+mksite "$site" "2.1.0a0+41361538.NV23.06"
+python3 -I "$vpy" --manifest "$man_real" --stage core --site "$site" >/dev/null \
+  && ok "version verifier normalizes versions (PEP 440 local label case)" || bad "version verifier did not normalize"
+mksite "$site" "2.1.0"
+python3 -I "$vpy" --manifest "$man_real" --stage core --site "$site" >/dev/null \
+  && bad "version verifier accepted a CPU/PyPI torch version" || ok "version verifier rejects a different torch version"
+mksite "$site" ""
+python3 -I "$vpy" --manifest "$man_real" --stage core --site "$site" >/dev/null \
+  && bad "version verifier accepted a missing torch" || ok "version verifier rejects a missing torch"
 reset_state; make_ws separated; touch "$state/smoke_fail"
 ( core_env; run_inst --stage core >/dev/null 2>&1 ) || true
 grep -q '"result": "fail"' "$WS"/reports/diag-core-*/smoke.json 2>/dev/null \

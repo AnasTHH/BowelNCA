@@ -53,6 +53,8 @@ EXPECTED_FSTYPE="ext4"
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 LOCK_DIR="${REPO_DIR}/env/xavier"
 SMOKE_PY="${REPO_DIR}/scripts/proposed/xavier_smoke_test.py"
+VERSIONS_PY="${REPO_DIR}/scripts/proposed/verify_installed_versions.py"
+MANIFEST="${REPO_DIR}/env/xavier/dependency-manifest.json"
 SMOKE_TIMEOUT_S=300
 # shellcheck source=../lib/workspace_checks.sh
 . "${REPO_DIR}/scripts/lib/workspace_checks.sh"
@@ -139,6 +141,9 @@ check_host() {
   grep -q "sha256:${TORCH_SHA256}" "${LOCK_DIR}/requirements-xavier-sci.lock" \
     || abort "torch hash in sci lock does not match the pinned SHA-256"
   [ -r "$SMOKE_PY" ] || abort "smoke test missing"
+  [ -r "$VERSIONS_PY" ] || abort "installed-version verifier missing"
+  [ -r "$MANIFEST" ] || abort "dependency manifest missing"
+  grep -q "\"sha256\": \"${TORCH_SHA256}\"" "$MANIFEST" || abort "torch hash in dependency manifest does not match the pinned SHA-256"
 }
 
 check_workspace() {
@@ -279,7 +284,7 @@ smoke_test() {
 }
 
 install_stage() {
-  local py stamp record smoke_json lock_hashes smoke_line freeze body
+  local py stamp record smoke_json lock_hashes smoke_line freeze versions body
   local -a pipi
 
   # Private diagnostics (never committed; deliberately kept after a failure).
@@ -328,8 +333,15 @@ install_stage() {
   [ -f "$smoke_json" ] && [ ! -L "$smoke_json" ] || abort "smoke result missing"
   smoke_line="$(tr -d '\n' < "$smoke_json")" || abort "could not read the smoke result"
   grep -q '"result": "pass"' <<<"$smoke_line" || abort "smoke result is not a pass"
+  # Version check through importlib.metadata against the manifest (PEP 440
+  # normalized). pip freeze is evidence only: a wheel installed from a local
+  # file is listed as a PEP 610 direct reference ("torch @ file:///..."), not
+  # "torch==<version>", so freeze text is not parsed for versions.
+  versions="$(clean_env "$py" -I "$VERSIONS_PY" --manifest "$MANIFEST" --stage "$STAGE")" \
+    || abort "installed versions do not match the dependency manifest: ${versions:-no output}"
+  grep -q '"result": "pass"' <<<"$versions" || abort "installed-version check did not pass"
   freeze="$(clean_env "$py" -I -m pip freeze --all)" || abort "pip freeze failed"
-  grep -q '^torch==' <<<"$freeze" || abort "pip freeze does not list torch"
+  [ -n "$freeze" ] || abort "pip freeze returned nothing"
 
   body="$(
     printf 'stage: %s\n' "$STAGE"
@@ -341,6 +353,7 @@ install_stage() {
     printf 'torch_wheel_sha256: %s\n' "$TORCH_SHA256"
     sed 's/^/lock_sha256: /' <<<"$lock_hashes"
     printf 'smoke: %s\n' "$smoke_line"
+    printf 'installed_versions: %s\n' "$versions"
     sed 's/^/freeze: /' <<<"$freeze"
     printf 'diagnostics: %s\n' "$DIAG_DIR"
   )" || abort "could not assemble the environment record"
