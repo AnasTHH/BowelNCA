@@ -77,7 +77,10 @@ allow_re+='|reports/[A-Za-z0-9._-]+\.md|reports/evidence/[A-Za-z0-9._-]+\.(md|tx
 allow_re+='|scripts/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(sh|py)|scripts/hooks/(pre-commit|pre-push|commit-msg)'
 allow_re+='|src/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.py'
 allow_re+='|tests/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(sh|py)'
-allow_re+='|env/xavier/[A-Za-z0-9._-]+\.(in|lock|json|py))$'
+allow_re+='|env/xavier/[A-Za-z0-9._-]+\.(in|lock|json|py)'
+# D19 P1 (D19-R02): CPU dev dependency lock and the synthetic golden digests.
+allow_re+='|env/dev/requirements-dev\.(in|lock)'
+allow_re+='|tests/python/golden/p1_digests\.json)$'
 safe_name_re='^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*$'
 # Images need a human publication approval recorded in this file, keyed by
 # the SHA-256 of the exact image content:
@@ -190,6 +193,12 @@ for i in "${!paths[@]}"; do
   pc_grep -qaE -- "$PC_AI_LINK_RE" "$blob" && report 'private AI-assistant link or session trailer' "$lbl"
   hits="$(pc_private_hits "$blob")" || pc_die 'private pattern scan failed'
   for h in $hits; do report "private identifier (pattern #$h)" "$lbl"; done
+
+  # Golden digests must declare themselves synthetic (never real-data hashes).
+  if [ "$f" = tests/python/golden/p1_digests.json ]; then
+    pc_grep -qaE '"synthetic"[[:space:]]*:[[:space:]]*true([[:space:]]*[,}]|[[:space:]]*$)' "$blob" \
+      || report 'golden digest file must declare "synthetic": true' "$lbl"
+  fi
 
   # Device evidence: only human-approved evidence in reports/evidence/, with
   # "REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>"; identifier scan as a net.
