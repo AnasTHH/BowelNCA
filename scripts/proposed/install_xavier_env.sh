@@ -28,7 +28,13 @@
 # and never writes outside /data/bowelnca. Every destination is checked to be
 # canonical (no symlinks), inside the workspace, on the workspace filesystem
 # and owned by the research account. A lock prevents concurrent runs. A
-# failed run removes exactly what this invocation created.
+# failed run removes exactly what this invocation created and keeps private
+# diagnostics under /data/bowelnca/reports/diag-*.
+#
+# These are FILESYSTEM SAFEGUARDS against mistakes and accidental damage. They
+# are NOT a security sandbox: package code still runs as the research account
+# with its normal permissions. The real controls are the OS account separation
+# (D21), hash-locked binary-only installs and human review.
 set -euo pipefail
 umask 077
 export LC_ALL=C
@@ -40,6 +46,7 @@ EXPECTED_L4T="R35 (release), REVISION: 6.4"
 TEGRA_RELEASE_FILE="/etc/nv_tegra_release"
 CUDA_HOME_DIR="/usr/local/cuda"
 PYTHON3="/usr/bin/python3"
+CURL="/usr/bin/curl"
 ROOT="/data/bowelnca"
 EXPECTED_MOUNT="/data"
 EXPECTED_FSTYPE="ext4"
@@ -54,6 +61,7 @@ SMOKE_TIMEOUT_S=300
 STAGE=""
 VENV=""
 DL_DIR=""
+DIAG_DIR=""
 CREATED=()
 SUCCESS=0
 PRE_FAILS=0
@@ -111,8 +119,9 @@ check_host() {
   [ -r "$TEGRA_RELEASE_FILE" ] && grep -qF "$EXPECTED_L4T" "$TEGRA_RELEASE_FILE" \
     || abort "L4T is not ${EXPECTED_L4T} (JetPack 5.1.6)"
   [ -x "$PYTHON3" ] || abort "$PYTHON3 missing"
-  "$PYTHON3" -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 8) else 1)' || abort "$PYTHON3 is not 3.8"
-  "$PYTHON3" -c 'import ensurepip, venv' 2>/dev/null \
+  [ -x "$CURL" ] || abort "$CURL missing"
+  clean_env "$PYTHON3" -I -c 'import sys; sys.exit(0 if sys.version_info[:2] == (3, 8) else 1)' || abort "$PYTHON3 is not 3.8"
+  clean_env "$PYTHON3" -I -c 'import ensurepip, venv' 2>/dev/null \
     || abort "python3 venv/ensurepip unavailable (would need an APPROVED privileged 'apt-get install python3.8-venv')"
   [ -x "${CUDA_HOME_DIR}/bin/nvcc" ] || abort "${CUDA_HOME_DIR}/bin/nvcc missing"
   # Capture first, then match: no pipe, so no SIGPIPE under pipefail.
@@ -166,10 +175,40 @@ core_record_for() {
   return 1
 }
 
+# The lock file is validated before it is opened: an existing path must be a
+# research-owned regular file with one link (no symlink, dangling symlink,
+# directory, FIFO or device). A new one is created exclusively (noclobber).
+# After opening, the descriptor must point at exactly that path.
 acquire_lock() {
-  exec 9>>"$ROOT/tmp/.bowelnca-install.lock" || abort "cannot open install lock"
+  local lf="$ROOT/tmp/.bowelnca-install.lock"
+  PRE_FAILS=0
+  ws_check_regular_file "$ROOT" "$lf"
+  [ "$PRE_FAILS" -eq 0 ] || abort "install lock file failed validation; refusing"
+  if [ ! -e "$lf" ]; then
+    ( set -C; : > "$lf" ) 2>/dev/null || abort "cannot create install lock exclusively"
+  fi
+  PRE_FAILS=0
+  ws_check_regular_file "$ROOT" "$lf"
+  [ "$PRE_FAILS" -eq 0 ] || abort "install lock file failed validation; refusing"
+  exec 9>>"$lf" || abort "cannot open install lock"
+  [ "$(readlink -f "/proc/${BASHPID}/fd/9")" = "$lf" ] || abort "install lock descriptor does not point at the lock file"
   flock -n 9 || abort "another installation is running (lock held); refusing"
   log "install lock acquired"
+}
+
+# clean_env CMD...: run CMD with a controlled environment. Inherited
+# PYTHONPATH, PYTHONHOME, PIP_TARGET, PIP_PREFIX, PIP_USER, PIP_INDEX_URL and
+# every other variable are dropped (only an HTTPS proxy, if set, is passed on);
+# pip reads no configuration files (PIP_CONFIG_FILE=/dev/null).
+clean_env() {
+  local -a extra=()
+  [ -n "${HTTPS_PROXY:-}" ] && extra+=("HTTPS_PROXY=${HTTPS_PROXY}")
+  env -i \
+    PATH=/usr/bin:/bin LANG=C.UTF-8 LC_ALL=C.UTF-8 \
+    HOME="${DL_DIR:-/nonexistent}" TMPDIR="${ROOT}/tmp" \
+    PIP_CONFIG_FILE=/dev/null PIP_NO_CACHE_DIR=1 PIP_NO_INPUT=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PYTHONNOUSERSITE=1 "${extra[@]}" \
+    "$@"
 }
 
 # track PATH: remember a path this invocation created (for rollback).
@@ -184,6 +223,9 @@ cleanup() {
     done
     printf '[install] failed (exit %s); removed %d path(s) created by this run\n' "$rc" "${#CREATED[@]}" >&2
   fi
+  if [ "$SUCCESS" -ne 1 ] && [ -n "$DIAG_DIR" ] && [ -d "$DIAG_DIR" ]; then
+    printf '[install] diagnostics kept privately in %s (do not publish)\n' "$DIAG_DIR" >&2
+  fi
 }
 
 # Lock file without the torch entry (torch is installed from the verified local wheel).
@@ -194,7 +236,9 @@ lock_without_torch() {
 # Environment hook sourced by the venv's activate. Caches live INSIDE the venv,
 # so removing the venv removes everything the environment ever cached.
 write_env_hook() {
-  cat > "${VENV}/bin/bowelnca-env.sh" <<EOF
+  local hook="${VENV}/bin/bowelnca-env.sh" d
+  {
+    cat <<EOF
 # BowelNCA research environment (sourced by activate). Nothing in ~/.bashrc.
 export CUDA_HOME="${CUDA_HOME_DIR}"
 case ":\${PATH}:" in *":\${CUDA_HOME}/bin:"*) ;; *) export PATH="\${CUDA_HOME}/bin:\${PATH}" ;; esac
@@ -206,9 +250,17 @@ export TORCH_EXTENSIONS_DIR="\${VIRTUAL_ENV}/.cache/torch_extensions"
 export MPLCONFIGDIR="\${VIRTUAL_ENV}/.cache/matplotlib"
 export PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PIP_NO_INPUT=1 PYTHONNOUSERSITE=1
 EOF
-  mkdir -p "${VENV}/.cache/xdg" "${VENV}/.cache/torch" "${VENV}/.cache/torch_extensions" "${VENV}/.cache/matplotlib"
+  } > "$hook" || return 1
+  [ -s "$hook" ] || return 1
+  for d in xdg torch torch_extensions matplotlib; do
+    mkdir -p -- "${VENV}/.cache/$d" || return 1
+    [ -d "${VENV}/.cache/$d" ] || return 1
+  done
+  [ -f "${VENV}/bin/activate" ] && [ ! -L "${VENV}/bin/activate" ] || return 1
   # shellcheck disable=SC2016  # expanded when activate runs
-  printf '\n. "${VIRTUAL_ENV}/bin/bowelnca-env.sh"\n' >> "${VENV}/bin/activate"
+  printf '\n. "${VIRTUAL_ENV}/bin/bowelnca-env.sh"\n' >> "${VENV}/bin/activate" || return 1
+  # shellcheck disable=SC2016
+  grep -qF '. "${VIRTUAL_ENV}/bin/bowelnca-env.sh"' "${VENV}/bin/activate" || return 1
 }
 
 # run_scoped CMD...: run CMD in a clean environment through the venv's activate,
@@ -227,26 +279,32 @@ smoke_test() {
 }
 
 install_stage() {
-  local py stamp record smoke_json
+  local py stamp record smoke_json lock_hashes smoke_line freeze body
   local -a pipi
-  # Install-time env: no pip cache, no user site, temp on the NVMe.
-  export TMPDIR="${ROOT}/tmp" PIP_NO_CACHE_DIR=1 PIP_NO_INPUT=1 PIP_DISABLE_PIP_VERSION_CHECK=1 PYTHONNOUSERSITE=1
+
+  # Private diagnostics (never committed; deliberately kept after a failure).
+  stamp="$(date -u +%Y%m%dT%H%M%SZ)" || abort "date failed"
+  local diag="${ROOT}/reports/diag-${STAGE}-${stamp}"
+  PRE_FAILS=0; ws_check_dest "$ROOT" "$diag"
+  [ "$PRE_FAILS" -eq 0 ] && [ ! -e "$diag" ] && [ ! -L "$diag" ] || abort "diagnostics directory unavailable"
+  mkdir -m 700 -- "$diag" || abort "cannot create diagnostics directory"
+  DIAG_DIR="$diag"
 
   DL_DIR="$(mktemp -d "${ROOT}/tmp/torch-dl.XXXXXX")" || abort "cannot create download directory"
   # 1. Download and verify the wheel BEFORE any environment exists.
-  curl -fL --proto '=https' --tlsv1.2 --retry 3 -o "${DL_DIR}/${TORCH_WHEEL}" "$TORCH_URL" \
+  clean_env "$CURL" -fL --proto '=https' --tlsv1.2 --retry 3 -o "${DL_DIR}/${TORCH_WHEEL}" "$TORCH_URL" \
     || abort "download failed"
   verify_sha256 "${DL_DIR}/${TORCH_WHEEL}" "$TORCH_SHA256"
 
-  # 2. Fresh versioned venv.
+  # 2. Fresh versioned venv, created in a controlled environment (-I: isolated mode).
   track "$VENV"
-  "$PYTHON3" -m venv "$VENV" || abort "venv creation failed"
+  clean_env "$PYTHON3" -I -m venv "$VENV" || abort "venv creation failed"
   py="${VENV}/bin/python"
-  pipi=("$py" -m pip install --require-hashes --no-deps --only-binary=:all:)
+  pipi=(clean_env "$py" -I -m pip install --require-hashes --no-deps --only-binary=:all:
+        --no-cache-dir --no-input --disable-pip-version-check --log "${DIAG_DIR}/pip.log")
 
-  # 3. Hash-locked installs.
-  # Each step is checked explicitly (|| abort), so failures abort even if a
-  # caller disabled errexit.
+  # 3. Hash-locked installs. Each step is checked explicitly (|| abort), so a
+  # failure aborts even if a caller disabled errexit.
   "${pipi[@]}" -r "${LOCK_DIR}/requirements-xavier-bootstrap.lock" || abort "pip bootstrap failed"
   if [ "$STAGE" = "core" ]; then
     "${pipi[@]}" -r <(lock_without_torch "${LOCK_DIR}/requirements-xavier-core.lock") || abort "core dependency install failed"
@@ -256,34 +314,49 @@ install_stage() {
   fi
   "${pipi[@]}" -r <(printf 'torch @ file://%s --hash=sha256:%s\n' "${DL_DIR}/${TORCH_WHEEL}" "$TORCH_SHA256") \
     || abort "torch install failed"
-  "$py" -m pip check || abort "pip check failed"
+  clean_env "$py" -I -m pip check || abort "pip check failed"
 
   # 4. Scoped environment hook, then the smoke test through it.
   write_env_hook || abort "could not write the environment hook"
-  smoke_json="${DL_DIR}/smoke.json"
+  smoke_json="${DIAG_DIR}/smoke.json"
   smoke_test "$smoke_json"
 
-  # 5. Environment record (no usernames or hostnames). "result: pass" is written last.
-  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
-  record="${ROOT}/reports/env-${STAGE}-${stamp}.txt"
-  [ ! -e "$record" ] || abort "record $record already exists"
-  track "$record"
-  {
+  # 5. Collect every piece of evidence first; each must succeed.
+  lock_hashes="$(cd "$LOCK_DIR" && sha256sum requirements-xavier-bootstrap.lock requirements-xavier-core.lock requirements-xavier-sci.lock)" \
+    || abort "could not hash the lock files"
+  [ "$(grep -c '^[0-9a-f]\{64\}  ' <<<"$lock_hashes")" = "3" ] || abort "lock hashes incomplete"
+  [ -f "$smoke_json" ] && [ ! -L "$smoke_json" ] || abort "smoke result missing"
+  smoke_line="$(tr -d '\n' < "$smoke_json")" || abort "could not read the smoke result"
+  grep -q '"result": "pass"' <<<"$smoke_line" || abort "smoke result is not a pass"
+  freeze="$(clean_env "$py" -I -m pip freeze --all)" || abort "pip freeze failed"
+  grep -q '^torch==' <<<"$freeze" || abort "pip freeze does not list torch"
+
+  body="$(
     printf 'stage: %s\n' "$STAGE"
     printf 'venv: %s\n' "$VENV"
     printf 'approval_core: %s\n' "${BOWELNCA_CORE_APPROVAL}"
-    [ "$STAGE" = "sci" ] && printf 'approval_sci: %s\n' "${BOWELNCA_SCI_APPROVAL}"
+    if [ "$STAGE" = "sci" ]; then printf 'approval_sci: %s\n' "${BOWELNCA_SCI_APPROVAL}"; fi
     printf 'reviewed_commit: %s\n' "${BOWELNCA_REVIEWED_COMMIT}"
     printf 'l4t: %s\n' "$EXPECTED_L4T"
     printf 'torch_wheel_sha256: %s\n' "$TORCH_SHA256"
-    (cd "$LOCK_DIR" && sha256sum requirements-xavier-*.lock) | sed 's/^/lock_sha256: /'
-    printf 'smoke: %s\n' "$(tr -d '\n' < "$smoke_json")"
-    "$py" -m pip freeze --all | sed 's/^/freeze: /'
-    printf 'result: pass\n'
-  } > "$record" || abort "could not write the environment record"
-  grep -qx 'result: pass' "$record" || abort "environment record incomplete"
+    sed 's/^/lock_sha256: /' <<<"$lock_hashes"
+    printf 'smoke: %s\n' "$smoke_line"
+    sed 's/^/freeze: /' <<<"$freeze"
+    printf 'diagnostics: %s\n' "$DIAG_DIR"
+  )" || abort "could not assemble the environment record"
+
+  # 6. Record: validated destination, exclusive create, "result: pass" last.
+  record="${ROOT}/reports/env-${STAGE}-${stamp}.txt"
+  PRE_FAILS=0; ws_check_dest "$ROOT" "$record"
+  [ "$PRE_FAILS" -eq 0 ] && [ ! -e "$record" ] && [ ! -L "$record" ] \
+    || abort "record destination exists, is a symlink, or is not contained"
+  ( set -C; printf '%s\n' "$body" > "$record" ) || abort "could not create the environment record exclusively"
+  track "$record"
+  printf 'result: pass\n' >> "$record" || abort "could not finish the environment record"
+  [ "$(tail -n 1 "$record")" = "result: pass" ] || abort "environment record incomplete"
   SUCCESS=1
   log "Environment record written to ${record}"
+  log "Diagnostics (private, do not publish): ${DIAG_DIR}"
   log "Done. Activate with: . ${VENV}/bin/activate"
 }
 

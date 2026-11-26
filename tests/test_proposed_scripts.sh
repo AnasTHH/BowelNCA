@@ -49,6 +49,17 @@ cat > "$stubs/ldconfig" <<EOF
 [ -f "$state/no_openblas" ] || echo '	libopenblas.so.0 (libc6,AArch64) => /usr/lib/aarch64-linux-gnu/libopenblas.so.0'
 i=0; while [ \$i -lt 20000 ]; do echo "	libfake\$i.so (libc6,AArch64) => /usr/lib/libfake\$i.so"; i=\$((i+1)); done
 EOF
+real_sha="$(command -v sha256sum)"; real_date="$(command -v date)"
+cat > "$stubs/sha256sum" <<EOF
+#!/bin/sh
+if [ -f "$state/fail_locksum" ]; then case "\$*" in *requirements-xavier*) exit 1 ;; esac; fi
+exec "$real_sha" "\$@"
+EOF
+cat > "$stubs/date" <<EOF
+#!/bin/sh
+[ "\$*" = "-u +%Y%m%dT%H%M%SZ" ] && { echo 20261201T000000Z; exit 0; }
+exec "$real_date" "\$@"
+EOF
 chmod +x "$stubs"/*
 
 fake_cuda="$work/cuda"; mkdir -p "$fake_cuda/bin" "$fake_cuda/lib64"
@@ -63,9 +74,12 @@ printf '# R35 (release), REVISION: 6.4, GCID: 0, BOARD: t186ref, EABI: aarch64\n
 venv_py="$work/venv_python"
 cat > "$venv_py" <<EOF
 #!/bin/sh
+[ "\$1" = "-I" ] && shift
 if [ "\$1" = "-m" ] && [ "\$2" = "pip" ]; then
   case "\$3" in
     install)
+      env | grep -E '^(PYTHON|PIP_|HOME=|PATH=)' | sort >> "$state/pip_env"
+      prev=""; for a in "\$@"; do [ "\$prev" = "--log" ] && echo "pip log" >> "\$a"; prev="\$a"; done
       n=\$(( \$(cat "$state/pipcount" 2>/dev/null || echo 0) + 1 )); echo \$n > "$state/pipcount"
       prev=""; for a in "\$@"; do
         [ "\$prev" = "-r" ] && echo "install\$n \$(grep -E '^[A-Za-z]' "\$a" | head -n 1 | cut -c1-60)" >> "$state/pip.log"
@@ -75,22 +89,26 @@ if [ "\$1" = "-m" ] && [ "\$2" = "pip" ]; then
       mkdir -p "\$(dirname "\$0")/../lib/fake-site" && echo \$n > "\$(dirname "\$0")/../lib/fake-site/pkg\$n"
       exit 0 ;;
     check) echo check >> "$state/pip.log"; exit 0 ;;
-    freeze) echo "torch==2.1.0a0+41361538.nv23.06"; echo "numpy==1.24.4"; exit 0 ;;
+    freeze) [ -f "$state/fail_freeze" ] && exit 1; echo "torch==2.1.0a0+41361538.nv23.06"; echo "numpy==1.24.4"; exit 0 ;;
   esac
 fi
 out=""; stage=""; prev=""
 for a in "\$@"; do [ "\$prev" = "--out" ] && out="\$a"; [ "\$prev" = "--stage" ] && stage="\$a"; prev="\$a"; done
 env | grep -E '^(CUDA_HOME|TORCH_HOME|MPLCONFIGDIR|XDG_CACHE_HOME|VIRTUAL_ENV|PATH|LD_LIBRARY_PATH|PIP_NO_CACHE_DIR)=' > "$state/smoke_env.\$stage"
-[ -f "$state/smoke_fail" ] && exit 1
+if [ -f "$state/smoke_fail" ]; then printf '{"result": "fail", "error": "synthetic"}\n' > "\$out"; exit 1; fi
+[ -f "$state/smoke_nojson" ] && exit 0
 printf '{"result": "pass", "stage": "%s", "torch_cuda_build": "11.4"}\n' "\$stage" > "\$out"
 EOF
 fake_py3="$work/python3"
 cat > "$fake_py3" <<EOF
 #!/bin/sh
+[ "\$1" = "-I" ] && shift
 [ "\$1" = "-c" ] && exit 0
 if [ "\$1" = "-m" ] && [ "\$2" = "venv" ]; then
+  env | grep -E '^(PYTHON|PIP_)' | sort > "$state/venv_env"
   mkdir -p "\$3/bin" || exit 1
-  printf 'VIRTUAL_ENV="%s"\nexport VIRTUAL_ENV\nPATH="\$VIRTUAL_ENV/bin:\$PATH"\nexport PATH\n' "\$3" > "\$3/bin/activate"
+  if [ -f "$state/activate_dir" ]; then mkdir -p "\$3/bin/activate"; else
+  printf 'VIRTUAL_ENV="%s"\nexport VIRTUAL_ENV\nPATH="\$VIRTUAL_ENV/bin:\$PATH"\nexport PATH\n' "\$3" > "\$3/bin/activate"; fi
   cp "$venv_py" "\$3/bin/python"; exit 0
 fi
 exit 1
@@ -128,6 +146,7 @@ fake_system() {  # fake_system LAYOUT (call after sourcing)
   ws_owner_uid() {
     case "$1" in
       "$ROOT"|"$ROOT/datasets") if [ "$FAKE_LAYOUT" = separated ]; then echo 1001; else echo 1000; fi ;;
+      "$ROOT/tmp/.bowelnca-install.lock") echo "${FAKE_LOCK_OWNER:-1000}" ;;
       "$ROOT"/*) echo 1000 ;;
       *) echo 0 ;;
     esac
@@ -142,7 +161,10 @@ fake_system() {  # fake_system LAYOUT (call after sourcing)
   }
   ws_mount_target() { echo "${FAKE_MNT_TARGET:-$EXPECTED_MOUNT}"; }
   ws_mount_fstype() { echo "${FAKE_FSTYPE:-ext4}"; }
-  ws_all_mount_targets() { printf '/\n%s\n' "$EXPECTED_MOUNT"; if [ -n "${FAKE_NESTED:-}" ]; then echo "$FAKE_NESTED"; fi; }
+  ws_all_mount_targets() {
+    [ -z "${FAKE_MOUNTS_FAIL:-}" ] || return 1
+    printf '/\n%s\n' "$EXPECTED_MOUNT"; if [ -n "${FAKE_NESTED:-}" ]; then echo "$FAKE_NESTED"; fi
+  }
   ws_dev() { if [ "$1" = / ]; then echo rootfs; else stat -c %d -- "$1"; fi; }
   WS_MIN_FREE_BYTES="${FAKE_MIN_FREE:-1}"
 }
@@ -154,7 +176,7 @@ run_inst() {
     BOWELNCA_SOURCE_ONLY=1
     . "$installer"
     ROOT="$WS"; EXPECTED_MOUNT="$data"; TEGRA_RELEASE_FILE="$tegra"; CUDA_HOME_DIR="$fake_cuda"
-    PYTHON3="$fake_py3"; REPO_DIR="$fake_repo"; LOCK_DIR="$locks"; TORCH_SHA256="$fake_hash"
+    PYTHON3="$fake_py3"; CURL="$stubs/curl"; REPO_DIR="$fake_repo"; LOCK_DIR="$locks"; TORCH_SHA256="$fake_hash"
     TORCH_URL="https://example.invalid/torch.whl"
     fake_system "${FAKE_LAYOUT_RUN:-separated}"
     main "$@"
@@ -269,7 +291,7 @@ no_markers && [ ! -e "$core_venv" ] && ok "concurrent refusal downloads and crea
 reset_state; make_ws separated; touch "$state/tamper"
 ( core_env; expect_fail "aborts on a SHA-256 mismatch" 'SHA-256 mismatch' run_inst --stage core )
 [ ! -e "$core_venv" ] && [ -z "$(find "$WS/tmp" -mindepth 1 ! -name .bowelnca-install.lock)" ] \
-  && [ -z "$(ls "$WS/reports")" ] && ok "checksum failure leaves no venv, download or record" \
+  && [ -z "$(find "$WS/reports" -name 'env-*')" ] && ok "checksum failure leaves no venv, download or record" \
   || bad "checksum failure left files behind"
 
 # Partial install rollback: fail at the 2nd pip install (core deps).
@@ -281,18 +303,73 @@ echo 2 > "$state/fail_pip_at"
 [ ! -e "$core_venv" ] && ok "partial venv rolled back" || bad "partial venv left behind"
 [ -f "$WS/venvs/unrelated-env/marker" ] && [ -f "$WS/cache/preexisting" ] \
   && ok "rollback keeps files this run did not create" || bad "rollback removed pre-existing files"
-[ -z "$(ls "$WS/reports")" ] && [ -z "$(find "$WS/tmp" -name 'torch-dl.*')" ] && ok "rollback leaves no record or download" \
+[ -z "$(find "$WS/reports" -name 'env-*')" ] && [ -z "$(find "$WS/tmp" -name 'torch-dl.*')" ] && ok "rollback leaves no record or download" \
   || bad "rollback left a record or download"
 
 # Smoke-test failure also rolls back.
 reset_state; make_ws separated; touch "$state/smoke_fail"
 ( core_env; expect_fail "aborts when the smoke test fails" 'smoke test failed' run_inst --stage core )
-[ ! -e "$core_venv" ] && [ -z "$(ls "$WS/reports")" ] && ok "smoke failure rolls back venv and record" || bad "smoke failure left files"
+[ ! -e "$core_venv" ] && [ -z "$(find "$WS/reports" -name 'env-*')" ] && ok "smoke failure rolls back venv and record" || bad "smoke failure left files"
 
 # sci before core: refused.
 reset_state; make_ws separated
 ( sci_env; expect_fail "sci refuses without a passing core record" 'no passing core record' run_inst --stage sci )
 no_markers || bad "sci-before-core invoked tools"
+
+# ======================= installer: R4 containment and failures ===================
+lock="$WS/tmp/.bowelnca-install.lock"
+lock_case() {  # lock_case DESC PATTERN SETUP...
+  local desc="$1" pat="$2"; shift 2
+  reset_state; make_ws separated
+  ( core_env; "$@"; expect_fail "$desc" "$pat" run_inst --stage core )
+  no_markers || bad "$desc: tools invoked: $(ls "$markers")"
+  [ ! -e "$core_venv" ] || bad "$desc: venv created"
+}
+lock_case "refuses a symlinked install lock" 'symlink' eval 'printf x > "$work/lock-target"; ln -s "$work/lock-target" "$lock"'
+lock_case "refuses a dangling symlink install lock" 'symlink' ln -s "$work/missing-lock" "$lock"
+lock_case "refuses a directory as install lock" 'not a regular file' mkdir "$lock"
+lock_case "refuses a FIFO as install lock" 'not a regular file' mkfifo "$lock"
+lock_case "refuses an install lock owned by another account" 'not owned by the research account' eval ': > "$lock"; export FAKE_LOCK_OWNER=1001'
+lock_case "refuses a hard-linked install lock" 'extra hard links' eval ': > "$lock"; ln "$lock" "$WS/tmp/second-link"'
+[ ! -e "$work/missing-lock" ] && ok "dangling lock symlink target never created" || bad "lock symlink target was created"
+pre_case "fails closed when mounts cannot be enumerated" 'could not enumerate mounts' export FAKE_MOUNTS_FAIL=1
+
+# Dangling symlink at the record destination (fixed timestamp via the date stub).
+reset_state; make_ws separated
+ln -s "$work/record-target" "$WS/reports/env-core-20261201T000000Z.txt"
+( core_env; expect_fail "refuses a dangling symlink at the record destination" 'record destination' run_inst --stage core )
+[ ! -e "$work/record-target" ] && [ ! -e "$core_venv" ] && ok "record symlink target never written; venv rolled back" \
+  || bad "record symlink followed or venv left"
+
+# Controlled installation environment (R4-02).
+reset_state; make_ws separated
+if out="$( (core_env; export PYTHONPATH=/evil PYTHONHOME=/evil PIP_TARGET=/evil PIP_PREFIX=/evil PIP_USER=1 \
+      PIP_INDEX_URL=https://evil.invalid PIP_CONFIG_FILE=/evil.conf; run_inst --stage core) 2>&1)"; then
+  if ! grep -qE '^(PYTHONPATH|PYTHONHOME|PIP_TARGET|PIP_PREFIX|PIP_USER|PIP_INDEX_URL)=' "$state/pip_env" "$state/venv_env" \
+     && grep -qx 'PIP_CONFIG_FILE=/dev/null' "$state/pip_env" && grep -qx 'PATH=/usr/bin:/bin' "$state/pip_env"; then
+    ok "pip and venv creation ignore inherited PYTHON*/PIP_* variables and pip config files"
+  else bad "inherited environment reached pip or venv: $(cut -d= -f1 "$state/pip_env" "$state/venv_env" | sort -u | tr '\n' ' ')"; fi
+else bad "install failed with hostile environment: $(tail -n 3 <<<"$out")"; fi
+[ ! -e /evil ] && ok "no install redirected outside the venv" || bad "install wrote to /evil"
+
+# Explicit failure handling (R4-03): each failure aborts, rolls back, keeps diagnostics.
+fail_case() {  # fail_case DESC PATTERN SWITCH
+  local desc="$1" pat="$2" sw="$3"
+  reset_state; make_ws separated; touch "$state/$sw"
+  ( core_env; expect_fail "$desc" "$pat" run_inst --stage core )
+  [ ! -e "$core_venv" ] && [ -z "$(find "$WS/reports" -name 'env-*')" ] \
+    && ok "$desc: venv and record rolled back" || bad "$desc: venv or record left behind"
+  [ -n "$(find "$WS/reports" -maxdepth 1 -name 'diag-core-*' -type d)" ] \
+    && ok "$desc: private diagnostics kept" || bad "$desc: diagnostics missing"
+}
+fail_case "aborts when the env hook cannot be written" 'environment hook' activate_dir
+fail_case "aborts when pip freeze fails" 'pip freeze failed' fail_freeze
+fail_case "aborts when the smoke result is missing" 'smoke result missing' smoke_nojson
+fail_case "aborts when lock hashing fails" 'hash the lock files' fail_locksum
+reset_state; make_ws separated; touch "$state/smoke_fail"
+( core_env; run_inst --stage core >/dev/null 2>&1 ) || true
+grep -q '"result": "fail"' "$WS"/reports/diag-core-*/smoke.json 2>/dev/null \
+  && ok "failed smoke result retained in private diagnostics" || bad "failed smoke JSON not retained"
 
 # ====================== installer: successful simulated runs =====================
 reset_state; make_ws separated
@@ -345,7 +422,7 @@ else bad "sci record incomplete"; fi
 grep -q '^install2 batchgenerators==' "$state/pip.log" && ok "sci installs from the sci lock" || bad "sci did not use the sci lock"
 
 # sci failure rolls back only the sci venv.
-rm -f "$state/pip.log" "$state/pipcount"; rm -rf "$sci_venv" "$WS"/reports/env-sci-*.txt
+rm -f "$state/pip.log" "$state/pipcount"; rm -rf "$sci_venv" "$WS"/reports/env-sci-*.txt "$WS"/reports/diag-sci-*
 echo 2 > "$state/fail_pip_at"
 ( sci_env; expect_fail "sci aborts when a pip step fails" 'removed' run_inst --stage sci )
 rm -f "$state/fail_pip_at"
@@ -448,6 +525,7 @@ ver_case "verifier rejects a symlinked subdirectory" 'subdir tmp missing, not a 
 ver_case "verifier rejects a wrong mount" 'workspace mount is' export FAKE_MNT_TARGET=/
 ver_case "verifier rejects a nested mount" 'mounted inside the workspace' export FAKE_NESTED="$WS/derived"
 ver_case "verifier rejects too little free space" 'bytes free' export FAKE_MIN_FREE=999999999999999999
+ver_case "verifier fails closed when mounts cannot be enumerated" 'could not enumerate mounts' export FAKE_MOUNTS_FAIL=1
 grep -q 'SKIPPED' <<<"$( (export FAKE_FSTYPE=vfat; run_ver --write-test) 2>&1 || true)" \
   && ok "write test reports SKIPPED when a check fails" || bad "write test skip not reported"
 rm -f "$stubs/mktemp"

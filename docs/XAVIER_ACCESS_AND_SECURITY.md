@@ -52,7 +52,7 @@
 
 ### 3.3 Migration procedure (proposed; run by the administrator; not executed)
 
-Principle: **current access is preserved until the new administrator account is independently verified**, and every phase has a stop condition and a rollback. Keep one already-authenticated session open as `<research-account>` (which still has sudo) for the whole procedure, and make sure console access or the device owner's own admin account is available as a fallback.
+Principle: **current access is preserved until the new administrator account is independently verified**, and every phase has a stop condition and a rollback. Keep one already-authenticated session open as `<research-account>` (which still has sudo) until Phase 4 is verified. **Keep the administrator fallback available throughout and afterwards:** console access or the device owner's own admin account must remain usable, and is never removed by this procedure. Research installs (D22/D23) start only after Phase 6.
 
 **Phase 0. Record the starting state (read-only).**
 ```bash
@@ -72,45 +72,66 @@ Do not add any `NOPASSWD` rule. Do not add the account to `docker`.
 
 **Phase 2. Verify the administrator independently.** From a **new** terminal on the laptop, with the admin key:
 ```bash
-ssh <admin-account>@<device>        # must log in with the new key
-id -nG                              # must include sudo
-sudo -k && sudo -v                  # must prompt for the password and succeed
-sudo -l                             # must show no NOPASSWD entries
+ssh <admin-account>@<device>          # must log in with the new key
+id -nG                                # must include sudo
+sudo -k && sudo -v                    # must prompt for the password and succeed
+sudo -l -U <admin-account>            # effective policy: (ALL : ALL) ALL, and no NOPASSWD anywhere
 ```
 **Stop condition:** if any of these fails, stop here. Nothing about `<research-account>` has changed. Fix the admin account, or remove it with `sudo deluser --remove-home <admin-account>`.
 
-**Phase 3. Re-own the parent and datasets** (as `<admin-account>`; `/data` is not touched).
+**Phase 3. Re-own the parent and datasets; normalize the execution subdirectories** (as `<admin-account>`; `/data` is not touched).
 ```bash
 sudo chown <admin-account>:<research-group> /data/bowelnca
 sudo chmod 0750 /data/bowelnca
 sudo chown -R <admin-account>:<research-group> /data/bowelnca/datasets
 sudo chmod 0750 /data/bowelnca/datasets
 sudo find /data/bowelnca/datasets -type f -exec chmod 0640 {} +
-stat -c '%U:%G %a %n' /data /data/bowelnca /data/bowelnca/*   # /data unchanged; others as in 3.2
+for d in workspace venvs derived checkpoints experiments reports cache tmp; do
+  sudo chown <research-account>:<research-group> "/data/bowelnca/$d"
+  sudo chmod 0700 "/data/bowelnca/$d"
+done
+stat -c '%U:%G %a %n' /data /data/bowelnca /data/bowelnca/*
+# Expect: /data unchanged; bowelnca 750 admin; datasets 750 admin; the eight others 700 research.
 ```
+Only the top level of the eight execution subdirectories is normalized; their contents keep their existing research ownership.
 
 **Phase 4. Remove privileges from the research account** (as `<admin-account>`, while the original session stays open).
 ```bash
 sudo gpasswd -d <research-account> sudo
-for g in admin wheel docker lxd libvirt disk; do id -nG <research-account> | grep -qw "$g" && sudo gpasswd -d <research-account> "$g"; done
-sudo grep -rn '<research-account>' /etc/sudoers /etc/sudoers.d/ || echo "no sudoers entries"
+for g in admin wheel docker lxd libvirt disk; do
+  if id -nG <research-account> | grep -qw "$g"; then sudo gpasswd -d <research-account> "$g"; fi
+done
+sudo grep -rn '<research-account>\|%<research-group>' /etc/sudoers /etc/sudoers.d/ || echo "no sudoers entries"
+sudo -l -U <research-account>        # effective policy: must report that the user may not run sudo
 ```
-Group changes apply to **new** sessions. Remove any sudoers entry found only after reviewing it.
+Group membership is only an input: the **effective** policy from `sudo -l -U` is the check, because sudoers can grant rights by user name, group or alias. Review and remove any remaining sudoers entry before continuing.
+**Stop condition:** if `sudo -l -U <research-account>` still lists any command, stop; do not continue to Phase 5.
 
-**Phase 5. Verify the research account** (new session as `<research-account>`, with its own key).
+**Phase 5. Close stale privileged research sessions** (as `<admin-account>`).
+Group changes do not affect processes that are already running. Every login session and process of `<research-account>` started before Phase 4 still carries the old `sudo` group, including the session kept open as a fallback.
 ```bash
-id -nG                                                   # must show no privileged group
+loginctl list-sessions                             # identify <research-account> sessions
+ps -o pid=,supgrp=,args= -u <research-account>     # any process listing sudo/admin/docker is stale
+# After confirming no needed work is running in them:
+sudo loginctl terminate-user <research-account>
+ps -o pid=,supgrp=,args= -u <research-account>     # must list no process with a privileged group
+```
+**Stop condition:** if any `<research-account>` process still lists a privileged group, do not proceed to installation.
+
+**Phase 6. Verify the research account** (fresh SSH session as `<research-account>`, with its own key).
+```bash
+id -nG                                                   # this process's groups: no privileged group
 bash scripts/verify_workspace.sh --layout separated      # must report 0 FAIL
 bash scripts/verify_workspace.sh --layout separated --write-test
 ```
-Then close the original privileged session.
+`verify_workspace.sh` reads the groups of its own process, so it also fails if it is run from a stale session.
 
 **Rollback** (as `<admin-account>`):
 ```bash
 sudo usermod -aG sudo <research-account>
-sudo chown -R <research-account>:<research-group> /data/bowelnca && sudo chmod 0700 /data/bowelnca
+sudo chown -R <research-account>:<research-group> /data/bowelnca && sudo chmod 0700 /data/bowelnca /data/bowelnca/datasets
 ```
-Review each command before running it. No step touches `/data`, the kernel, JetPack, Docker, power modes or SSH server configuration.
+Review each command before running it. No step touches `/data`, the kernel, JetPack, Docker, power modes or SSH server configuration, and the administrator fallback is kept.
 
 ### 3.4 Supplementary groups
 

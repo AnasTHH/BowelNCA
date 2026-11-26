@@ -1,11 +1,11 @@
 # Stage 0 - Xavier system and compatibility report
 
-**Date (UTC):** 2026-11-26 (revision 5, after review round 3; first drafted 2026-11-25)
+**Date (UTC):** 2026-11-26 (revision 6, after review round 4 and W1; first drafted 2026-11-25)
 **Device owner/reviewer:** Dr. Iyad Naim
 **Engineer:** Claude Code (lead implementation agent), for Anas
 **Git commit:** head of PR #2 (see PR for the exact SHA and CI run)
 **Plan version:** `docs/DEVELOPMENT_PLAN_v1.2.md`
-**Status:** **Draft - Stage 0 INCOMPLETE.** The inventory has been collected by the owner; the reviewer found the sanitized summary technically acceptable, pending the owner's formal redaction attestation. Workspace verification is outstanding. Installation and the GPU smoke test are **unapproved** and proposed for a separate Stage 1A (D24). No stage is approved by this report, and no earlier technical GO applies to the current head.
+**Status:** **Draft - Stage 0 INCOMPLETE.** The inventory has been collected by the owner; the reviewer found the sanitized summary technically acceptable, pending the owner's formal redaction attestation. Workspace verification **passed in the interim layout (W1)**. Installation and the GPU smoke test are **unapproved** and proposed for a separate Stage 1A (D24). No stage is approved by this report, and round 4 was a CONDITIONAL GO on `73dbac6` subject to the R4 corrections in this revision and the remaining human gates.
 
 ## 0. Summary for the reviewer
 
@@ -14,7 +14,7 @@
 | Xavier access | **Done (human only).** Private VPN with a direct peer connection; OpenSSH with a dedicated ED25519 key; dedicated project account with password-protected sudo granted by the device administrator. The agent has **no** access | Owner report, 26 Nov |
 | Hardware/software inventory | **Collected** 2026-11-26T07:20:16Z with the reviewed script (commit `e26e3db`, blob `16b7cb9f`, re-verified). The sanitized summary was compared against the owner's terminal output by the round 3 reviewer: consistent, no sensitive identifiers. **Pending the owner's redaction attestation**; until then it is kept in private project storage, not in this public repository | Section 1 (values); E1 |
 | Storage | **Verified (owner-reported).** Root eMMC 4.5 GiB free (83% used); existing NVMe `/data` 363 GiB free. No storage purchase, repartitioning or OS migration needed | Section 1.3 |
-| Research workspace | **Created** at `/data/bowelnca` (mode 700, interim layout). Write test and mount/ownership check **pending**; the administrator-owned target layout is proposed (D21) | Section 1.4; `scripts/verify_workspace.sh` |
+| Research workspace | **Verified in the interim layout (W1 PASSED,** 2026-11-26T08:40:33Z, commit `73dbac6`, 0 FAIL, 2 expected WARN). The administrator-owned separated layout (D21) is proposed and needs its own verification | Section 1.4; `scripts/verify_workspace.sh` |
 | PyTorch wheel | **Re-verified 26 Nov:** NVIDIA `torch 2.1.0a0+41361538.nv23.06`, cp38, CUDA 11.4, SHA-256 unchanged. Matches the observed JetPack 5.1.6 / Python 3.8.10 / CUDA 11.4 / cuDNN 8.6. Compatibility on 5.1.6 is **inferred until the smoke test runs** | Section 2 |
 | Dependencies | **Hash-locked** for cp38/aarch64. A machine-readable manifest records all 51 actual wheels (filename, version, tags, Requires-Python, SHA-256). All binary wheels; no compilation needed | `env/xavier/dependency-manifest.json`, `docs/XAVIER_ENVIRONMENT.md` |
 | Installation | **Proposal revised, NOT approved, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 88 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
@@ -63,7 +63,20 @@ The existing NVMe is sufficient, so no storage expansion, repartitioning or OS m
 
 `/data/bowelnca/` was created by the owner with the administrator's grant (`install -d -m 700`, owned by the project account). It has the subdirectories `workspace venvs datasets derived checkpoints experiments reports cache tmp`. Both commands returned without errors.
 
-**Pending (W1):** run [`scripts/verify_workspace.sh --write-test`](../scripts/verify_workspace.sh) (interim layout). It checks ownership, mode, canonical paths, the `/data` ext4 mount, nested mounts, separation from the root filesystem, unchanged `/data` ownership, free space in bytes, cache growth under HOME and privileged groups. Only if every check passes does it write one 1 MiB file in `tmp/`, fsync that file, verify size and checksum and remove it (removed on any failure). It prints no usernames, hostnames or device names. After D21, the same script with `--layout separated` verifies the target layout.
+**W1 PASSED (interim layout).** The owner ran `bash scripts/verify_workspace.sh --layout interim --write-test` at commit `73dbac6f2699d6c313f7536adf60fade326218ec` on 2026-11-26T08:40:33Z. Before the run, the owner normalized the workspace root and all nine subdirectories to mode 0700. Results (owner-reported):
+
+| Check | Result |
+|---|---|
+| FAIL / WARN | **0 FAIL, 2 WARN** |
+| Ownership, mode, canonical paths | Verified |
+| Mount / filesystem | `/data`, ext4; not the root filesystem; no nested mounts |
+| Free space | Workspace 389,725,986,816 bytes; root filesystem 4,813,811,712 bytes |
+| GPU groups | `video` and `render` membership present |
+| Write test | Exactly 1,048,576 bytes written, fsynced, checksum-verified and removed |
+| Expected WARN 1 | Research account still in `sudo` (pending D21) |
+| Expected WARN 2 | `datasets/` still research-writable (pending D21) |
+
+This verifies the **interim** layout only. The **separated** layout (D21) is a distinct, later step: `verify_workspace.sh --layout separated` after the migration, where both warnings become failures if unresolved.
 
 ### 1.5 Observations (no action authorized)
 
@@ -104,6 +117,7 @@ Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md). R
 - **Precondition reliability (R3-07):** command output is captured before matching (no SIGPIPE false failures under `pipefail`); free space is checked in bytes from `statfs`.
 - **Fail-closed:** wheel `sha256sum --check --strict` **before** any venv exists; every pip step `--require-hashes --no-deps --only-binary=:all:` and explicitly checked.
 - **Scoped CUDA and smoke test (R3-06):** the smoke test runs through the venv's `activate` in a clean environment, the same environment research runs will use, and records the imported torch version, CUDA build, cuDNN version, device capability and memory results. The sci stage adds pinned-version and import checks for the scientific stack.
+- **Round 4 (R4-01 to R4-03):** the lock file is validated before opening (symlinks, dangling symlinks, other file types, wrong owner and extra hard links refused); the record is created exclusively and a dangling symlink there is refused; failure to read the mount table fails closed; venv creation and pip run in a controlled environment (`env -i`, `python -I`, `PIP_CONFIG_FILE=/dev/null`); every hook write and all evidence (lock hashes, smoke JSON, `pip freeze`) must succeed before `result: pass`; failed runs keep private diagnostics on the device. These are filesystem safeguards, **not a security sandbox**.
 - **Footprint:** about 2 GB on NVMe for both venvs, about 0 on the eMMC.
 - **Possible privileged prerequisites:** if `python3.8-venv` or `libopenblas` is missing, the script aborts. Installing them needs separate approval.
 
@@ -124,7 +138,7 @@ Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md). R
 Full assessment: [`docs/XAVIER_ACCESS_AND_SECURITY.md`](../docs/XAVIER_ACCESS_AND_SECURITY.md).
 - **Main risk (S1):** the research account is a sudoer. **D21 (revised, R3-03):** a new administrator account with password-protected sudo (never `NOPASSWD`); the existing SSH research identity loses sudo and stays out of `docker`. Account names are kept out of the public repository.
 - **Layout:** administrator-owned `/data/bowelnca` (0750, research group, traversal only) and `datasets/` (read-only to research); research-owned 0700 execution subdirectories; `/data` unchanged.
-- **Migration:** five phases, run by the administrator; current access is preserved until the new administrator account is verified from a separate session; stop conditions and rollback at each phase. **Not executed.**
+- **Migration:** seven phases (0 to 6), run by the administrator; current access is preserved until the new administrator account is verified from a separate session; the eight execution subdirectories are normalized to 0700; the effective sudo policy is verified with `sudo -l -U` from the administrator account; stale privileged research sessions are closed and checked before any install; the administrator fallback is kept. **Not executed.**
 - **Evidence (R3-10):** unapproved drafts never enter the public repository. CI rejects any `evidence-draft` path and any file marked `PENDING-HUMAN-APPROVAL`.
 - **Not published:** VPN details, hostnames, account names, keys, raw logs and private correspondence.
 
@@ -154,7 +168,8 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 |---|---|---|---|
 | ~~B1~~ | Access and inventory | **Resolved for humans:** SSH works and the inventory is collected. The agent intentionally has no access | - |
 | E1 | Owner's redaction attestation of the sanitized evidence | Reviewer recommends acceptance; attestation pending | Anas (initials and date) |
-| W1 | Workspace check and write test (interim layout) | Pending; script ready | Anas (manual run, non-destructive) |
+| ~~W1~~ | Workspace check and write test (interim layout) | **PASSED** 2026-11-26T08:40:33Z at `73dbac6` (0 FAIL, 2 expected WARN) | - |
+| W2 | Separated-layout verification (`--layout separated`) | After D21 migration; part of Stage 1A | Administrator, then research account |
 | S1 / D21 | Account separation, layout and migration | **Proposed, not executed.** Prerequisite for D22 | Dr. Iyad and the device administrator |
 | D24 | Split Stage 1 into 1A (environment) and 1B (upstream reproduction) | Proposed; stage definitions unchanged until sign-off | Dr. Iyad |
 | I1 / D22 | Core environment install and CUDA smoke test (G1) | **Not approved** (proposed Stage 1A) | Dr. Iyad |
@@ -162,8 +177,8 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | I3 | Privileged prerequisites, only if `--check-only` reports `python3.8-venv` or `libopenblas` missing | Not requested | Dr. Iyad |
 | B2 | OctreeNCA license | Inquiry sent, awaiting response; decision 16 Dec 2026 (D17) | Authors, then Anas and Dr. Iyad |
 | B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 proposed (separate environments) | Dr. Iyad |
-| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 proposed; **not started** | Dr. Iyad (scientific approval) |
-| M | Merge PR #2 (squash) | **Round 3: REQUEST CHANGES** on `9c92ab7`; this revision awaits round 4 independent review. The round 2 technical GO applied only to `878197a` | Round 4 review, then Dr. Iyad authorization |
+| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 **recommended for approval** by Anas (round 4) so it can start without waiting for the license; **not started** | Dr. Iyad (scientific approval) |
+| M | Merge PR #2 (squash) | Round 4: **CONDITIONAL GO** on `73dbac6`, subject to R4-01 to R4-04 (this revision) and the human gates. Earlier GOs applied only to their reviewed commits | Final review of this head, then Dr. Iyad authorization |
 
 ### Stage 0 acceptance criteria (issue #1)
 
@@ -177,10 +192,10 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | Installation commands proposed only | **Done** (revised proposal, locks, manifest), not executed |
 | `reports/stage_0.md` with evidence and reproducibility notes | **Done** (this revision) |
 | Redacted evidence, zero raw scans, zero privileged changes by the agent | **Reviewed; owner attestation pending (E1)** |
-| Workspace verified | **Pending (W1)** |
+| Workspace verified | **Done (interim layout, W1).** Separated layout verified later (W2, after D21) |
 | Next-stage gate explicitly pending | **Yes. Stage 1 (or 1A/1B) NOT authorized** |
 
-**Stage 0 is not complete.** Closing it needs E1, W1, round 4 review and Dr. Iyad's sign-off. If D24 is approved, the GPU smoke test belongs to Stage 1A and does not hold Stage 0 open; otherwise Dr. Iyad decides where it belongs.
+**Stage 0 is not complete.** Closing it needs E1 (owner attestation), final review of this revision and Dr. Iyad's sign-off. If D24 is approved, the GPU smoke test belongs to Stage 1A and does not hold Stage 0 open; otherwise Dr. Iyad decides where it belongs.
 
 - **Reviewer sign-off (name, date, decision):** _pending - Dr. Iyad Naim_
 
@@ -192,7 +207,7 @@ All pass locally (as root and as an unprivileged user) and in CI:
 - `tests/test_repo_policy.sh` (32 synthetic violations rejected, including evidence drafts anywhere in the tree);
 - `tests/test_inventory_readonly.sh`;
 - `tests/test_inventory_guard_mutations.sh` (13 mutants rejected, none executed);
-- `tests/test_proposed_scripts.sh` (88 checks): refusals (no stage, approval, reviewed commit, dirty checkout); precondition failures (interim layout, sudo/docker membership, writable datasets, wrong mount or filesystem, nested mount, low space, missing libopenblas, symlinked directories and destinations); large `ldconfig` output without SIGPIPE; `--check-only` writes nothing; a concurrent run refuses; checksum failure; rollback after a failed pip step and after a failed smoke test, keeping pre-existing files; **successful simulated core and sci runs** (install order, hash locking, records with both approvals, smoke test executed through `activate` with scoped CUDA and caches, core venv unchanged by sci); lock/manifest consistency; verifier interim and separated layouts, write test skipped on failed checks, failed and short writes detected and cleaned up, no global sync, no identifiers printed.
+- `tests/test_proposed_scripts.sh` (114 checks; round 4 added lock-file validation (symlink, dangling symlink, directory, FIFO, wrong owner, hard link), mount-enumeration failure, a dangling symlink at the record destination, a hostile inherited environment (`PYTHONPATH`, `PYTHONHOME`, `PIP_TARGET`, `PIP_PREFIX`, `PIP_USER`, `PIP_INDEX_URL`, `PIP_CONFIG_FILE`), and failures of the env hook, `pip freeze`, the smoke JSON and lock hashing, each with rollback and retained private diagnostics): refusals (no stage, approval, reviewed commit, dirty checkout); precondition failures (interim layout, sudo/docker membership, writable datasets, wrong mount or filesystem, nested mount, low space, missing libopenblas, symlinked directories and destinations); large `ldconfig` output without SIGPIPE; `--check-only` writes nothing; a concurrent run refuses; checksum failure; rollback after a failed pip step and after a failed smoke test, keeping pre-existing files; **successful simulated core and sci runs** (install order, hash locking, records with both approvals, smoke test executed through `activate` with scoped CUDA and caches, core venv unchanged by sci); lock/manifest consistency; verifier interim and separated layouts, write test skipped on failed checks, failed and short writes detected and cleaned up, no global sync, no identifiers printed.
 
 One defect was found while writing these tests: a failed pip step could be ignored when the script ran inside a caller that had disabled errexit. Every install step now aborts explicitly, and a mutation check confirmed the rollback tests fail if that is removed.
 
@@ -209,7 +224,8 @@ These are regression checks with substituted identities and mounts, not security
   - Python 3.8 framing.
 - **Round 2 (25 Nov, `878197a`):** technical GO for the preparatory changes at that commit only (superseded by round 3), subject to Dr. Iyad's merge authorization (squash). Status updates in `e26e3db`.
 - **26 Nov (`9c92ab7`):** owner completed access, inventory and workspace. Observed values, locks, installer proposal, workspace verifier and security assessment added.
-- **Round 3 (26 Nov, `9c92ab7`):** REQUEST CHANGES, R3-01 to R3-10. The sanitized inventory was found consistent with the owner's terminal output. This revision addresses all ten items (sections 1.4, 3, 4, 5, 7, 8 and 9; D21 to D24).
+- **Round 3 (26 Nov, `9c92ab7`):** REQUEST CHANGES, R3-01 to R3-10. The sanitized inventory was found consistent with the owner's terminal output. Addressed in `73dbac6`.
+- **Round 4 (26 Nov, `73dbac6`):** CONDITIONAL GO with targeted corrections R4-01 to R4-04; account names stay private; no history rewrite. W1 passed the same day. This revision applies R4-01 to R4-04, records W1 and D20 (interim), and records Anas's recommendation to approve D19.
 
 ## 11. Sources
 

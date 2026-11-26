@@ -35,7 +35,7 @@ ws_dev()           { stat -c %d -- "$1"; }
 ws_writable()      { [ -w "$1" ]; }
 ws_mount_target()  { findmnt -n -o TARGET -T "$1" 2>/dev/null; }
 ws_mount_fstype()  { findmnt -n -o FSTYPE -T "$1" 2>/dev/null; }
-ws_all_mount_targets() { findmnt -r -n -o TARGET 2>/dev/null; }
+ws_all_mount_targets() { findmnt -r -n -o TARGET; }
 # Free bytes available to an unprivileged user (statfs: f_bavail * f_bsize).
 ws_avail_bytes() {
   local a s
@@ -101,11 +101,17 @@ ws_check_mount() {
     if [ "$(ws_dev "$root")" != "$(ws_dev /)" ]; then ws_pass "workspace is not on the root filesystem"
     else ws_fail "workspace is on the root filesystem (eMMC protection)"; fi
   fi
-  # No other filesystem may be mounted inside the workspace.
+  # No other filesystem may be mounted inside the workspace. If the mount
+  # table cannot be read (or is empty), fail closed.
+  local targets
+  if ! targets="$(ws_all_mount_targets)" || [ -z "$targets" ]; then
+    ws_fail "could not enumerate mounts; nested-mount check failed closed"
+    return 0
+  fi
   while IFS= read -r t; do
     [ -n "$t" ] || continue
     case "$t" in "$root"/*) ws_fail "another filesystem is mounted inside the workspace"; return 0 ;; esac
-  done < <(ws_all_mount_targets)
+  done <<<"$targets"
   ws_pass "no nested mounts inside the workspace"
 }
 
@@ -197,4 +203,18 @@ ws_check_dest() {
     ws_fail "destination ROOT$rel is not owned by the research account"; return 0
   fi
   ws_pass "destination ROOT$rel contained in the workspace"
+}
+
+# ws_check_regular_file ROOT PATH: an existing file the installer will open or
+# append to must be a regular file (not a symlink, dangling symlink, directory,
+# FIFO or device), inside ROOT, research-owned, with a single hard link.
+ws_check_regular_file() {
+  local root="$1" p="$2" rel
+  rel="${p#"$root"}"
+  if [ -L "$p" ]; then ws_fail "ROOT$rel is a symlink"; return 0; fi
+  if [ ! -e "$p" ]; then ws_pass "ROOT$rel absent"; return 0; fi
+  if [ ! -f "$p" ]; then ws_fail "ROOT$rel is not a regular file"; return 0; fi
+  if [ "$(ws_owner_uid "$p")" != "$(ws_current_uid)" ]; then ws_fail "ROOT$rel is not owned by the research account"; return 0; fi
+  if [ "$(stat -c %h -- "$p")" != "1" ]; then ws_fail "ROOT$rel has extra hard links"; return 0; fi
+  ws_check_dest "$root" "$p"
 }

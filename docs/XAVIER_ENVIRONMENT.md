@@ -76,10 +76,10 @@ A later change creates `-v2` venvs rather than modifying existing ones.
 2. **Host:** `aarch64`; `/etc/nv_tegra_release` reports R35 revision 6.4; `/usr/bin/python3` is 3.8 with `ensurepip` and `venv` (otherwise a privileged `apt-get install python3.8-venv` would need separate approval); `/usr/local/cuda/bin/nvcc` reports 11.4; `libopenblas.so.0` is in the linker cache (otherwise `libopenblas-dev`, separate approval). Command output is captured before matching, so no pipe can fail with SIGPIPE under `pipefail`.
 3. **Account (D21):** not root; in no privileged group (`sudo admin wheel docker lxd libvirt disk`).
 4. **Workspace (D21 separated layout):** `/data/bowelnca` canonical (no symlink in the path), owned by the administrator, group = a research group, mode 750, not research-writable; `datasets/` administrator-owned and not research-writable; the eight execution subdirectories research-owned, mode 700, not symlinks, on the workspace filesystem.
-5. **Filesystem:** the workspace mount is `/data`, type `ext4`, not the root filesystem, with **no other filesystem mounted inside it**; at least 10 GiB (10,737,418,240 bytes) free, measured in bytes from `statfs`.
+5. **Filesystem:** the workspace mount is `/data`, type `ext4`, not the root filesystem, with **no other filesystem mounted inside it** (if the mount table cannot be read, the check fails closed); at least 10 GiB (10,737,418,240 bytes) free, measured in bytes from `statfs`.
 6. **Locks and smoke test** present; the pinned torch hash appears in the core and sci locks.
 
-Then, **while holding an exclusive lock** (`flock` on `/data/bowelnca/tmp/.bowelnca-install.lock`; a concurrent run refuses):
+Then, **while holding an exclusive lock** (`flock` on `/data/bowelnca/tmp/.bowelnca-install.lock`; a concurrent run refuses). Before it is opened, the lock path is validated: an existing path must be a research-owned regular file with a single link (symlinks, dangling symlinks, directories, FIFOs and devices are refused); a new one is created exclusively; after opening, the descriptor must point at exactly that path.
 
 7. **Containment:** the venv path, `tmp/` and `reports/` are canonical, inside the workspace, on the workspace filesystem, and research-owned. Symlinks anywhere on the path are rejected.
 8. The target venv does not exist (never overwritten).
@@ -106,12 +106,14 @@ The approval references are an **accidental-execution guard, not authentication 
 ### 4.3 What the script does (after the preconditions)
 
 1. Downloads the wheel to a fresh `tmp/torch-dl.*` directory and runs `sha256sum --check --strict`. **On a mismatch it deletes the file and aborts before any venv exists.**
-2. Creates the stage's venv with `/usr/bin/python3 -m venv`.
-3. Hash-locked installs, each `--require-hashes --no-deps --only-binary=:all:` and each checked explicitly (`|| abort`, so a failure aborts even if a caller disabled errexit): pip bootstrap; core (or sci) dependencies without torch; torch from the verified local file; `pip check`. No pip cache is used (`PIP_NO_CACHE_DIR=1`).
+2. Creates the stage's venv with `/usr/bin/python3 -I -m venv` in a **controlled environment** (`env -i` with a fixed PATH, `PIP_CONFIG_FILE=/dev/null` and only the pip settings the script sets; an HTTPS proxy is passed on if set). Inherited `PYTHONPATH`, `PYTHONHOME`, `PIP_TARGET`, `PIP_PREFIX`, `PIP_USER`, `PIP_INDEX_URL` and pip configuration files cannot redirect or alter the install.
+3. Hash-locked installs in the same controlled environment (`python -I -m pip install --require-hashes --no-deps --only-binary=:all: --no-cache-dir`), each checked explicitly (`|| abort`, so a failure aborts even if a caller disabled errexit): pip bootstrap; core (or sci) dependencies without torch; torch from the verified local file; `pip check`. pip's log goes to the private diagnostics directory.
 4. Writes `bin/bowelnca-env.sh` in the venv and sources it from `activate`: `CUDA_HOME=/usr/local/cuda`, its `bin` on PATH, its `lib64` on `LD_LIBRARY_PATH`, `TMPDIR` on the NVMe, and `TORCH_HOME`, `TORCH_EXTENSIONS_DIR`, `MPLCONFIGDIR` and `XDG_CACHE_HOME` **inside the venv**. Nothing is written to `~/.bashrc` or system files.
 5. Runs the smoke test (section 6) **through `activate` in a clean environment** (`env -i`, then `. venv/bin/activate`), which is the same scoped environment later research runs use. 300-second timeout.
-6. Writes the record `/data/bowelnca/reports/env-<stage>-<UTC>.txt`: stage, venv, both approval references (sci), reviewed commit, L4T, wheel hash, lock hashes, the smoke-test JSON, `pip freeze`, and `result: pass` **last**. No usernames or hostnames.
-7. **On any failure**, the trap removes exactly the paths this invocation created (its venv, its record) and its download directory. Pre-existing venvs, caches and records are never touched.
+6. Collects the evidence first and aborts if any part fails: lock-file hashes (all three), the smoke-test JSON (must exist and report `pass`), and `pip freeze` (must list torch). Then creates the record `/data/bowelnca/reports/env-<stage>-<UTC>.txt` **exclusively** (an existing file or a dangling symlink at that path is refused) with: stage, venv, both approval references (sci), reviewed commit, L4T, wheel hash, lock hashes, smoke JSON, `pip freeze`, diagnostics path, and `result: pass` appended **last**. No usernames or hostnames.
+7. **On any failure**, the trap removes exactly the paths this invocation created (its venv, its record) and its download directory. Pre-existing venvs, caches and records are never touched. **Diagnostics are kept privately** in `/data/bowelnca/reports/diag-<stage>-<UTC>/` (pip log, smoke JSON) for investigation; they stay on the device and are never committed.
+
+**Scope of these safeguards.** Containment, locking, the controlled environment and rollback protect against mistakes and accidental damage on the filesystem. They are **not a security sandbox**: package code still runs as the research account with its normal permissions. The real controls are the account separation (D21), hash-locked binary-only artefacts and human review.
 
 ### 4.4 Footprint (estimated from measured wheel sizes)
 
