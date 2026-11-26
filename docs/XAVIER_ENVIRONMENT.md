@@ -21,7 +21,7 @@ This is NVIDIA's standard supported stack for the installed JetPack, and the pro
 | ABI / arch | `cp38-cp38-linux_aarch64`; `Requires-Python >=3.8.0` | Wheel tag and METADATA |
 | Built for | CUDA 11.4 (`torch/version.py: cuda = '11.4'`) | Wheel contents |
 
-**Compatibility with JetPack 5.1.6: inferred, not yet tested on this device.** NVIDIA lists the wheel for "JetPack 5.1.x"; staff confirmed it on 5.1.4 / AGX Xavier; NVIDIA states 5.1.6 "packages the same compute stack as 5.1.5"; the device's CUDA 11.4 and cuDNN 8.6 match. The smoke test (section 6) is the on-device verification.
+**Status: candidate compatible build, pending on-device validation** (JetPack 5.1.6; not yet installed or tested on this device). NVIDIA lists the wheel for "JetPack 5.1.x"; staff confirmed it on 5.1.4 / AGX Xavier; NVIDIA states 5.1.6 "packages the same compute stack as 5.1.5"; the device's CUDA 11.4 and cuDNN 8.6 match. The smoke test (section 6) is the on-device verification.
 
 ## 3. Dependencies
 

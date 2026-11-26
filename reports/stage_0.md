@@ -1,26 +1,26 @@
 # Stage 0 - Xavier system and compatibility report
 
-**Date (UTC):** 2026-11-26 (revision 7, after the final Stage 0 engineering review; first drafted 2026-11-25)
+**Date (UTC):** 2026-11-26 (revision 8, documentation only: E1 accepted and engineering acceptance recorded; first drafted 2026-11-25)
 **Device owner/reviewer:** Dr. Iyad Naim
 **Engineer:** Claude Code (lead implementation agent), for Anas
 **Git commit:** head of PR #2 (see PR for the exact SHA and CI run)
 **Plan version:** `docs/DEVELOPMENT_PLAN_v1.2.md`
-**Status:** **Draft - Stage 0 INCOMPLETE.** The inventory has been collected by the owner; the reviewer found the sanitized summary technically acceptable, pending the owner's formal redaction attestation. Workspace verification **passed in the interim layout (W1)**. Installation and the GPU smoke test are **unapproved** and proposed for a separate Stage 1A (D24). No stage is approved by this report, and round 4 was a CONDITIONAL GO on `73dbac6` subject to the R4 corrections in this revision and the remaining human gates.
+**Status:** **Engineering preparation is complete; formal Stage 0 acceptance remains pending** (Dr. Iyad's sign-off). The independent engineering review accepted PR #2 at commit `18689161acd47ded650cc76f83fd7d5232fc1260` with all 122 regression checks passing. The owner attested the redaction of the sanitized inventory on 2026-11-26 (E1 accepted), and it is published in [`reports/evidence/`](evidence/stage0_inventory_2026-11-26.md). Workspace verification **passed in the interim layout (W1)**. Installation and the GPU smoke test are **unapproved** and proposed for a separate Stage 1A (D24). No stage is approved by this report.
 
 ## 0. Summary for the reviewer
 
 | Area | State | Evidence |
 |---|---|---|
 | Xavier access | **Done (human only).** Private VPN with a direct peer connection; OpenSSH with a dedicated ED25519 key; dedicated project account with password-protected sudo granted by the device administrator. The agent has **no** access | Owner report, 26 Nov |
-| Hardware/software inventory | **Collected** 2026-11-26T07:20:16Z with the reviewed script (commit `e26e3db`, blob `16b7cb9f`, re-verified). The sanitized summary was compared against the owner's terminal output by the round 3 reviewer: consistent, no sensitive identifiers. **Pending the owner's redaction attestation**; until then it is kept in private project storage, not in this public repository | Section 1 (values); E1 |
+| Hardware/software inventory | **Collected** 2026-11-26T07:20:16Z with the reviewed script (commit `e26e3db`, blob `16b7cb9f`, re-verified). The sanitized summary was compared against the owner's terminal output by the round 3 reviewer: consistent, no sensitive identifiers. **Redaction attested by the owner (AN, 2026-11-26); E1 accepted and published** | Section 1 (values); [`reports/evidence/stage0_inventory_2026-11-26.md`](evidence/stage0_inventory_2026-11-26.md) |
 | Storage | **Verified (owner-reported).** Root eMMC 4.5 GiB free (83% used); existing NVMe `/data` 363 GiB free. No storage purchase, repartitioning or OS migration needed | Section 1.3 |
 | Research workspace | **Verified in the interim layout (W1 PASSED,** 2026-11-26T08:40:33Z, commit `73dbac6`, 0 FAIL, 2 expected WARN). The administrator-owned separated layout (D21) is proposed and needs its own verification | Section 1.4; `scripts/verify_workspace.sh` |
-| PyTorch wheel | **Re-verified 26 Nov:** NVIDIA `torch 2.1.0a0+41361538.nv23.06`, cp38, CUDA 11.4, SHA-256 unchanged. Matches the observed JetPack 5.1.6 / Python 3.8.10 / CUDA 11.4 / cuDNN 8.6. Compatibility on 5.1.6 is **inferred until the smoke test runs** | Section 2 |
+| PyTorch wheel | **Candidate compatible build, pending on-device validation.** NVIDIA `torch 2.1.0a0+41361538.nv23.06`, cp38, CUDA 11.4, SHA-256 re-verified 26 Nov and unchanged. Its declared targets match the observed JetPack 5.1.6 / Python 3.8.10 / CUDA 11.4 / cuDNN 8.6; it has not been installed or run on the device | Section 2 |
 | Dependencies | **Hash-locked** for cp38/aarch64. A machine-readable manifest records all 51 actual wheels (filename, version, tags, Requires-Python, SHA-256). All binary wheels; no compilation needed | `env/xavier/dependency-manifest.json`, `docs/XAVIER_ENVIRONMENT.md` |
-| Installation | **Proposal revised, NOT approved, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 122 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
+| Installation | **Proposal accepted by engineering review at `1868916`; NOT approved for execution, NOT executed.** Separate versioned core and sci venvs, containment and lock checks, exact rollback; 122 CI regression checks. Proposed as Stage 1A (D22, D23, D24); requires D21 first | `scripts/proposed/install_xavier_env.sh` |
 | GPU / CUDA functionality | **Not tested.** PyTorch is not installed | - |
 | OctreeNCA license | **Unresolved (B2).** Inquiry sent 25 Nov 2026, awaiting response; decision point 16 Dec 2026 (D17) | `docs/UPSTREAM_LICENSE_REVIEW.md` |
-| Security | Account separation (D21) with directory layout and a migration procedure that preserves current access; **no changes made** | `docs/XAVIER_ACCESS_AND_SECURITY.md` |
+| Security | **No further account changes have been made following the initial authorized access setup.** Account separation (D21) with directory layout and a migration procedure that preserves current access is proposed, not executed | `docs/XAVIER_ACCESS_AND_SECURITY.md` |
 | Host changes by the agent / data / training | **None** | - |
 
 ## 1. System facts (observed, sanitized)
@@ -98,7 +98,7 @@ This verifies the **interim** layout only. The **separated** layout (D21) is a d
 | NumPy | `1.24.4`. NVIDIA's documented `1.26.1` requires Python >= 3.9 |
 | torchvision | No JetPack 5 wheel; source build excluded pending authorization |
 
-The observed stack is NVIDIA's standard supported environment for JetPack 5.1.x. Python 3.9.5 exists on the device, but it is not used because the JetPack 5 wheels are cp38 only.
+**Determination:** this wheel is a **candidate compatible build, pending on-device validation** (the Stage 1A smoke test). The observed stack is NVIDIA's standard supported environment for JetPack 5.1.x. Python 3.9.5 exists on the device, but it is not used because the JetPack 5 wheels are cp38 only.
 
 ### 2.1 Upstream OctreeNCA vs this toolchain (risk B3)
 
@@ -138,6 +138,8 @@ Full procedure: [`docs/XAVIER_ENVIRONMENT.md`](../docs/XAVIER_ENVIRONMENT.md). R
 
 Full assessment: [`docs/XAVIER_ACCESS_AND_SECURITY.md`](../docs/XAVIER_ACCESS_AND_SECURITY.md).
 - **Main risk (S1):** the research account is a sudoer. **D21 (revised, R3-03):** a new administrator account with password-protected sudo (never `NOPASSWD`); the existing SSH research identity loses sudo and stays out of `docker`. Account names are kept out of the public repository.
+- **Scope of a D21 approval:** it authorizes the documented manual account migration by the device administrator, but **does not authorize autonomous agent execution** on the device.
+- **Current state:** no further account changes have been made following the initial authorized access setup.
 - **Layout:** administrator-owned `/data/bowelnca` (0750, research group, traversal only) and `datasets/` (read-only to research); research-owned 0700 execution subdirectories; `/data` unchanged.
 - **Migration:** seven phases (0 to 6), run by the administrator; current access is preserved until the new administrator account is verified from a separate session; the eight execution subdirectories are normalized to 0700; the effective sudo policy is verified with `sudo -l -U` from the administrator account; stale privileged research sessions are closed and checked before any install; the administrator fallback is kept. **Not executed.**
 - **Evidence (R3-10):** unapproved drafts never enter the public repository. CI rejects any `evidence-draft` path and any file marked `PENDING-HUMAN-APPROVAL`.
@@ -156,12 +158,13 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 
 | Item | State |
 |---|---|
-| Inventory evidence | Sanitized transcription, reviewed in round 3 as consistent with the owner's terminal output. **Removed from the public repository** (R3-10) and kept in private project storage until the owner attests the redaction; it then enters `reports/evidence/` with `REDACTED-BY-HUMAN: <initials> <date>`. The earlier draft commit `9c92ab7` remains in this PR branch's history; it contains no sensitive identifiers (round 3 review), so no history rewrite is proposed. A squash merge keeps it out of `main` |
+| Inventory evidence | Sanitized transcription, reviewed in round 3 as consistent with the owner's terminal output. **Redaction attested by the owner on 2026-11-26 (`REDACTED-BY-HUMAN: AN 2026-11-26`); E1 accepted.** Published as [`reports/evidence/stage0_inventory_2026-11-26.md`](evidence/stage0_inventory_2026-11-26.md). Relative to the attested private copy, only the attestation header and the title (no longer "draft") changed; the body is identical. Its workspace section reflects the state at collection time (write test pending), which W1 later resolved (section 1.4). The earlier draft commit `9c92ab7` remains in this PR branch's history; it contains no sensitive identifiers (round 3 review), so no history rewrite is proposed. A squash merge keeps it out of `main` |
 | Raw log | Kept privately by the owner; not committed |
 | Data transfer / training | **None** |
 | Read-only inventory (Stage 0 scope) | Run by the owner, unprivileged, with the reviewed script at `e26e3db`. Read-only; no sudo |
 | Owner's authorized administrative setup | **Separate from the inventory and outside the agent's boundaries.** With the device administrator's grant, the owner created `/data/bowelnca` and its nine subdirectories (D20) and, before W1, normalized them to mode 0700. These were manual, authorized administrative actions by a human on the project workspace only; `/data` was not changed |
 | Workspace verification (W1) | Run by the owner, unprivileged; non-destructive (one 1 MiB temp file, removed) |
+| Account changes | The device administrator's initial authorized access setup (the dedicated project account, its SSH key and password-protected sudo) only. **No further account changes have been made following the initial authorized access setup** |
 | Agent execution boundary | **Unchanged.** The agent has no access to the Xavier, ran nothing on it, and made no privileged, account, permission or system change anywhere. Its work is limited to this repository and its cloud sandbox |
 | Privileged changes by the agent | **None** |
 | Earlier incident (25 Nov) | A test-design bug ran an injected mutant in the agent's cloud sandbox only. Fixed; covered by the mutation test (section 9) |
@@ -171,10 +174,10 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | ID | Item | Status | Needed from |
 |---|---|---|---|
 | ~~B1~~ | Access and inventory | **Resolved for humans:** SSH works and the inventory is collected. The agent intentionally has no access | - |
-| E1 | Owner's redaction attestation of the sanitized evidence | Reviewer recommends acceptance; attestation pending | Anas (initials and date) |
+| ~~E1~~ | Owner's redaction attestation of the sanitized evidence | **Accepted.** Attested by Anas (AN, 2026-11-26); published in `reports/evidence/` | - |
 | ~~W1~~ | Workspace check and write test (interim layout) | **PASSED** 2026-11-26T08:40:33Z at `73dbac6` (0 FAIL, 2 expected WARN) | - |
 | W2 | Separated-layout verification (`--layout separated`) | After D21 migration; part of Stage 1A | Administrator, then research account |
-| S1 / D21 | Account separation, layout and migration | **Proposed, not executed.** Prerequisite for D22 | Dr. Iyad and the device administrator |
+| S1 / D21 | Account separation, layout and migration | **Proposed, not executed.** Prerequisite for D22. Approval would authorize the documented manual migration by the device administrator, but not autonomous agent execution | Dr. Iyad and the device administrator |
 | D24 | Split Stage 1 into 1A (environment) and 1B (upstream reproduction) | Proposed; stage definitions unchanged until sign-off | Dr. Iyad |
 | I1 / D22 | Core environment install and CUDA smoke test (G1) | **Not approved** (proposed Stage 1A) | Dr. Iyad |
 | I2 / D23 | Scientific environment install and import checks | **Not approved**; separate from D22 | Dr. Iyad |
@@ -182,24 +185,24 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | B2 | OctreeNCA license | Inquiry sent, awaiting response; decision 16 Dec 2026 (D17) | Authors, then Anas and Dr. Iyad |
 | B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 proposed (separate environments) | Dr. Iyad |
 | P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 **recommended for approval** by Anas (round 4) so it can start without waiting for the license; **not started** | Dr. Iyad (scientific approval) |
-| M | Merge PR #2 (squash) | Round 4: **CONDITIONAL GO** on `73dbac6`, subject to R4-01 to R4-04 (this revision) and the human gates. Earlier GOs applied only to their reviewed commits | Final review of this head, then Dr. Iyad authorization |
+| M | Merge PR #2 (squash) | **Engineering review accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`** (all 122 regression checks passing). This documentation-only revision follows it and needs verification of its exact head. Earlier GOs applied only to their reviewed commits | Anas (verify this head), then Dr. Iyad's merge authorization |
 
 ### Stage 0 acceptance criteria (issue #1)
 
 | Criterion | Status |
 |---|---|
-| Device model, architecture, Jetson Linux release captured | **Done** (observed; attestation pending, E1) |
+| Device model, architecture, Jetson Linux release captured | **Done** (observed; E1 accepted) |
 | Python, CUDA, PyTorch, `torch.cuda.is_available()` captured, including absent-import cases | **Done:** PyTorch absent, so CUDA availability is not testable before an install |
 | Memory/storage, cooling/power noted | **Done** |
-| NVIDIA wheel checked against the observed JetPack and ABI, not installed | **Done** (on-device confirmation is the Stage 1A smoke test) |
+| NVIDIA wheel checked against the observed JetPack and ABI, not installed | **Done:** candidate compatible build, pending on-device validation (Stage 1A smoke test) |
 | OctreeNCA commit identified, license recorded separately | **Done**; license **unresolved** |
 | Installation commands proposed only | **Done** (revised proposal, locks, manifest), not executed |
 | `reports/stage_0.md` with evidence and reproducibility notes | **Done** (this revision) |
-| Redacted evidence, zero raw scans, zero privileged changes by the agent | **Reviewed; owner attestation pending (E1)** |
+| Redacted evidence, zero raw scans, zero privileged changes by the agent | **Done:** owner attestation recorded (E1 accepted); no raw scans; no privileged changes by the agent |
 | Workspace verified | **Done (interim layout, W1).** Separated layout verified later (W2, after D21) |
 | Next-stage gate explicitly pending | **Yes. Stage 1 (or 1A/1B) NOT authorized** |
 
-**Stage 0 is not complete.** Closing it needs E1 (owner attestation), final review of this revision and Dr. Iyad's sign-off. If D24 is approved, the GPU smoke test belongs to Stage 1A and does not hold Stage 0 open; otherwise Dr. Iyad decides where it belongs.
+**Engineering preparation is complete; formal Stage 0 acceptance remains pending.** Formal acceptance needs Dr. Iyad's sign-off (and verification of this documentation-only head). If D24 is approved, the GPU smoke test belongs to Stage 1A and does not hold Stage 0 open; otherwise Dr. Iyad decides where it belongs.
 
 - **Reviewer sign-off (name, date, decision):** _pending - Dr. Iyad Naim_
 
@@ -230,7 +233,8 @@ These are regression checks with substituted identities and mounts, not security
 - **26 Nov (`9c92ab7`):** owner completed access, inventory and workspace. Observed values, locks, installer proposal, workspace verifier and security assessment added.
 - **Round 3 (26 Nov, `9c92ab7`):** REQUEST CHANGES, R3-01 to R3-10. The sanitized inventory was found consistent with the owner's terminal output. Addressed in `73dbac6`.
 - **Round 4 (26 Nov, `73dbac6`):** CONDITIONAL GO with targeted corrections R4-01 to R4-04; account names stay private; no history rewrite. W1 passed the same day. This revision applies R4-01 to R4-04, records W1 and D20 (interim), and records Anas's recommendation to approve D19.
-- **Final Stage 0 engineering review (26 Nov, `87858b6`):** Technical GO for the preparatory repository changes, subject to the owner's redaction attestation (E1) and Dr. Iyad's merge authorization; **no installation authorization**. One pre-installation correction: verify installed versions with `importlib.metadata` against the manifest instead of parsing `pip freeze` (a local wheel is listed as `torch @ file:///...`). Done in this revision, with regression tests; `pip freeze` is kept as evidence.
+- **Final Stage 0 engineering review (26 Nov, `87858b6`):** Technical GO for the preparatory repository changes, subject to the owner's redaction attestation (E1) and Dr. Iyad's merge authorization; **no installation authorization**. One pre-installation correction: verify installed versions with `importlib.metadata` against the manifest instead of parsing `pip freeze` (a local wheel is listed as `torch @ file:///...`). Done in `1868916`, with regression tests; `pip freeze` is kept as evidence. The independent engineering review then **accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`** with all 122 regression checks passing.
+- **Revision 8 (26 Nov, documentation only):** the owner attested the redaction (`REDACTED-BY-HUMAN: AN 2026-11-26`), so E1 is accepted and the sanitized inventory is published in `reports/evidence/`. Wording corrected: engineering preparation complete with formal acceptance pending; no further account changes after the initial authorized access setup; the wheel is a candidate compatible build pending on-device validation; D21 approval covers the manual migration by the administrator, not autonomous agent execution. No engineering changes.
 
 ## 11. Sources
 

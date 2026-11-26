@@ -176,6 +176,6 @@ The repository policy check rejects any `evidence-draft` path or file marked `PE
 
 ## 8. Decisions requested
 
-1. Approve the two-account separation and layout (D21, sections 3.1 and 3.2) and the migration procedure (3.3), executed manually by the administrator.
+1. Approve the two-account separation and layout (D21, sections 3.1 and 3.2) and the migration procedure (3.3), executed manually by the administrator. This approval authorizes the documented manual account migration by the device administrator; it does **not** authorize autonomous agent execution (section 5).
 2. Confirm that no project account is added to `docker` or `sudo` beyond `<admin-account>`'s `sudo`, and that `NOPASSWD` is not configured.
 3. Approve the dataset-isolation layout (section 4) as a Stage 2 precondition.
