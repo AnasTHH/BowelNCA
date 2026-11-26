@@ -9,7 +9,18 @@
 # This is a safety net for mistakes, not an access control. Runs on file
 # names and text only; safe for hosted CI.
 #
+# Also enforces the publication allowlist (only approved paths and file
+# types may be tracked), rejects private AI-assistant links and session
+# trailers, and, when a private pattern file exists OUTSIDE the repository,
+# rejects private identifiers (device account names, hostnames). Output names
+# only the file and the rule; matched text is never printed.
+#
 # Usage: scripts/check_repo_policy.sh [repo_root]   (default: git toplevel)
+# Private patterns: $BOWELNCA_PRIVATE_PATTERNS, else
+#   ${XDG_CONFIG_HOME:-$HOME/.config}/bowelnca/private-patterns.txt
+#   (one extended regex per line; '#' comments). Set
+#   BOWELNCA_REQUIRE_PRIVATE_PATTERNS=1 to fail when no such file exists
+#   (the git hooks do this; hosted CI has no private values and skips it).
 set -euo pipefail
 
 root="${1:-$(git rev-parse --show-toplevel)}"
@@ -82,6 +93,52 @@ for f in "${files[@]}"; do
   grep -qE '(^|[[:space:]])/dev/[a-z]' "$f" && report 'block-device path in evidence' "$f"
   grep -qE 'ssh-(ed25519|rsa)|ecdsa-sha2-|SHA256:[A-Za-z0-9+/]{43}' "$f" && report 'SSH key or fingerprint in evidence' "$f"
 done
+
+# 8. Publication allowlist: every tracked file must be in an approved path
+#    with an approved type. Adding a path or type is a reviewed change here.
+allow_re='^(CLAUDE\.md|README\.md|LICENSE(\.md)?|SECURITY\.md|\.gitignore|\.gitleaks\.toml|pyproject\.toml'
+allow_re+='|\.github/workflows/[A-Za-z0-9._-]+\.ya?ml'
+allow_re+='|docs/([A-Za-z0-9._/-]+)\.md|docs/(figures|img)/[A-Za-z0-9._/-]+\.(png|jpe?g|svg)'
+allow_re+='|reports/[A-Za-z0-9._-]+\.md|reports/evidence/[A-Za-z0-9._-]+\.(md|txt)'
+allow_re+='|scripts/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(sh|py)|scripts/hooks/(pre-commit|pre-push|commit-msg)'
+allow_re+='|src/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.py'
+allow_re+='|tests/([A-Za-z0-9._-]+/)*[A-Za-z0-9._-]+\.(sh|py)'
+allow_re+='|env/xavier/[A-Za-z0-9._-]+\.(in|lock|json|py))$'
+for f in "${files[@]}"; do
+  grep -qE "$allow_re" <<<"$f" || report 'path or file type not on the publication allowlist' "$f"
+done
+
+# 9. Private AI-assistant links (project, session, artifact, chat or share
+#    pages) and session trailers. Public product pages are allowed.
+ai_link_re='claude\.ai/(code/)?(session|project|artifact|chat|share)|Claude''-Session:'
+for f in "${files[@]}"; do
+  [ -f "$f" ] || continue
+  if grep -qIE -- "$ai_link_re" "$f"; then report 'private AI-assistant link or session trailer' "$f"; fi
+done
+
+# 10. Private identifiers from a local pattern file kept OUTSIDE the repository.
+private_patterns="${BOWELNCA_PRIVATE_PATTERNS:-${XDG_CONFIG_HOME:-$HOME/.config}/bowelnca/private-patterns.txt}"
+if [ -f "$private_patterns" ]; then
+  pp_real="$(realpath -- "$private_patterns")"; root_real="$(realpath -- .)"
+  case "$pp_real/" in
+    "$root_real"/*) report 'private pattern file must live outside the repository' '(pattern file)' ;;
+    *)
+      n=0
+      while IFS= read -r pat || [ -n "$pat" ]; do
+        case "$pat" in ''|'#'*) continue ;; esac
+        n=$((n + 1))
+        for f in "${files[@]}"; do
+          [ -f "$f" ] || continue
+          if grep -qIE -- "$pat" "$f" 2>/dev/null || grep -qE -- "$pat" <<<"$f"; then
+            report "private identifier (pattern #$n)" "$f"
+          fi
+        done
+      done < "$private_patterns"
+      printf 'INFO: %d private identifier patterns checked\n' "$n" ;;
+  esac
+elif [ "${BOWELNCA_REQUIRE_PRIVATE_PATTERNS:-0}" = 1 ]; then
+  report 'private pattern file required but not found (see SECURITY.md)' '(pattern file)'
+fi
 
 # 7. Required governance files.
 for f in CLAUDE.md docs/DEVELOPMENT_PLAN_v1.2.md docs/DATA_GOVERNANCE.md .gitignore; do

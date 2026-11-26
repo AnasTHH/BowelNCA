@@ -36,6 +36,7 @@ Only **Stage 0 (read-only Xavier hardware and toolchain inventory)** is ready to
 - Uploading raw scans or patient labels to tools, issues, agents or hosted CI.
 - Editing the approved split manifest after freeze, or visiting locked test storage.
 - Merging your own PRs or changing the experimental primary contrast.
+- Publishing anything `SECURITY.md` prohibits, including private AI-assistant session, project or artifact links in commits, PR text or comments. Install the hooks (`scripts/install_git_hooks.sh`) before pushing.
 
 Security boundaries must be enforced by SSH permissions, dataset ACLs and separate storage. Claude Code approval/deny rules and hooks are helpful defense-in-depth but are **not** sufficient access controls.
 
