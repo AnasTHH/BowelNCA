@@ -23,7 +23,9 @@ new_fixture_repo() {
 base="$work/clean"
 new_fixture_repo "$base"
 mkdir -p "$base/reports/evidence"
-printf 'REDACTED-BY-HUMAN: AB 2026-11-25\nL4T R35 (release), REVISION: 6.4\nfree: 15Gi\n' > "$base/reports/evidence/stage0_inventory_redacted.txt"
+printf 'REDACTED-BY-HUMAN: AB 2026-11-25\nL4T R35 (release), REVISION: 6.4\ncuDNN 8.6.0.166 TensorRT 8.5.2.2\nfree: 15Gi\n' > "$base/reports/evidence/stage0_inventory_redacted.txt"
+mkdir -p "$base/reports/evidence-draft"
+printf 'REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nCUDA 11.4.19-1, mount /data\n' > "$base/reports/evidence-draft/draft.md"
 git -C "$base" add -A
 if ! bash "$checker" "$base" >/dev/null; then printf 'FAIL: clean fixture rejected\n'; bash "$checker" "$base" || true; fail=1; fi
 
@@ -50,6 +52,12 @@ cases=(
   'notes.md|-----BEGIN OPENSSH PRIVATE KEY-----'
   'reports/evidence/no_header.txt|L4T R35'
   'reports/evidence/ip.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nlisten 192.168.1.20'
+  'reports/evidence/vpn.txt|REDACTED-BY-HUMAN: AB 2026-11-25\npeer 100.101.102.103'
+  'reports/evidence/tsnet.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nhost dev.tail1234.ts.net'
+  'reports/evidence/key.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nssh-ed25519 AAAAC3Nza'
+  'reports/evidence/badheader.txt|REDACTED-BY-HUMAN: PENDING\nL4T R35'
+  'reports/evidence-draft/noheader.md|L4T R35'
+  'reports/evidence-draft/ip.md|REDACTION-STATUS: PENDING-HUMAN-APPROVAL\nlisten 10.0.0.5'
   'reports/evidence/home.txt|REDACTED-BY-HUMAN: AB 2026-11-25\n/home/devuser/venv'
   'reports/evidence/dev.txt|REDACTED-BY-HUMAN: AB 2026-11-25\n/dev/mmcblk0p1 28G'
   'reports/evidence/mac.txt|REDACTED-BY-HUMAN: AB 2026-11-25\nether 00:1b:44:11:3a:b7'

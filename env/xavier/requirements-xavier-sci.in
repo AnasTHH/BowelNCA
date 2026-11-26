@@ -1,0 +1,13 @@
+# Scientific stack proposed for Stage 1+ (Python 3.8, aarch64). Binary wheels only.
+# Regenerate (from env/xavier/):
+#   uv pip compile --python-version 3.8 --python-platform aarch64-manylinux_2_31 --only-binary :all: --generate-hashes --no-header --emit-index-url requirements-xavier-sci.in -o requirements-xavier-sci.lock
+-c requirements-xavier-core.lock
+scipy
+scikit-image
+nibabel
+SimpleITK
+torchio
+einops
+batchgenerators
+matplotlib
+tqdm

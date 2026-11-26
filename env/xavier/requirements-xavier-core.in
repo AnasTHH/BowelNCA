@@ -1,0 +1,5 @@
+# Core runtime for the JetPack 5.1.x smoke test (Python 3.8, aarch64).
+# Regenerate (from env/xavier/):
+#   uv pip compile --python-version 3.8 --python-platform aarch64-manylinux_2_31 --only-binary :all: --generate-hashes --no-header --emit-index-url requirements-xavier-core.in -o requirements-xavier-core.lock
+torch @ https://developer.download.nvidia.com/compute/redist/jp/v512/pytorch/torch-2.1.0a0+41361538.nv23.06-cp38-cp38-linux_aarch64.whl
+numpy==1.24.4

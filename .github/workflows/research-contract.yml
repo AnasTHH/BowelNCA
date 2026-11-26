@@ -29,10 +29,10 @@ jobs:
       - name: Shell syntax
         run: |
           set -euo pipefail
-          for f in scripts/*.sh tests/*.sh; do bash -n "$f"; done
+          for f in scripts/*.sh scripts/proposed/*.sh tests/*.sh; do bash -n "$f"; done
 
       - name: ShellCheck
-        run: shellcheck -S warning scripts/*.sh tests/*.sh
+        run: shellcheck -S warning scripts/*.sh scripts/proposed/*.sh tests/*.sh
 
       - name: Repository policy (no data, weights, secrets)
         run: bash scripts/check_repo_policy.sh
@@ -45,3 +45,6 @@ jobs:
 
       - name: Regression check rejects known-bad mutations
         run: bash tests/test_inventory_guard_mutations.sh
+
+      - name: Proposed installer and workspace verifier (stubbed, no network installs)
+        run: bash tests/test_proposed_scripts.sh
