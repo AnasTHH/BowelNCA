@@ -37,6 +37,9 @@ Build, assess, and document a lightweight **3D OctreeNCA** segmentation approach
 | Code licensing | Check OctreeNCA redistribution/modification rights before incorporating third-party source in a public repository | Publicly readable GitHub source does not necessarily grant a license |
 | Reference standard | One released consensus reference mask per canonical scan; source paper reports multiple readers in annotation process | Avoids inaccurate 'one human annotator' framing |
 | Research phases | Keep Xavier exploration distinct from confirmatory UoN HPC and final testing | Preserves permissions and scientific independence |
+| Stage 1 split (D24, approved 27 Nov 2026) | Stage 1 becomes **1A** (Xavier environment and bounded CUDA validation) and **1B** (upstream reproduction); the GPU smoke test moves from Stage 0 to 1A | Environment work does not depend on the upstream license and has different risks |
+| Private split artefacts (D31, approved 27 Nov 2026) | Real identifiers, the split manifest and its sidecar, the allowed-transfer manifest and restricted hashes stay in private research storage; never in the public repository | The repository is public (D16) |
+| Evaluation definitions (D26, D27, D29, D30, approved 27 Nov 2026) | Empty-case Dice/HD95 rules, HD95 definition, spacing strata and Selection30 composition fixed as recorded in `docs/DECISIONS.md`. Threshold/inverse-mapping order (D28) still pending | Fixed before any comparison |
 
 ## 3. Dataset, anatomy, and source-of-truth rules
 
@@ -75,10 +78,10 @@ If and only if the audit confirms **102 eligible independent scans** and no pati
 - Test: **52 canonical cases**, locked away from training and Xavier.
 - Development: **50 canonical cases**, comprising `train40 = 40` and `validation10 = 10`.
 - Nested training subsets: `train20` subset `train30` subset `train40`.
-- Fixed seed **42**; stratify by acquisition/in-plane-spacing groups while documenting how singleton/outlier spacing cases are allocated.
+- Fixed seed **42**; stratify by in-plane spacing rounded to 0.01 mm; strata with fewer than 3 cases are pooled into one "other" stratum and allocated by the same seeded procedure (D29). `train20` and `train30` are seeded stratified subsamples of `train40` (D30).
 - Manifest must contain source dataset version and hashes, canonical/excluded IDs, duplicate-group identifiers, split assignments and ordering, algorithm version, and generation seed.
 
-Use a separate `splits.json.sha256` sidecar file, or hash the canonical JSON *excluding* any self-checksum field. **Do not put a file's full SHA-256 within the same bytes being hashed**. Commit the manifest and sidecar, validate their equality in CI, and treat revisions as signed-off amendments. Never silently overwrite the frozen split.
+Use a separate `splits.json.sha256` sidecar file, or hash the canonical JSON *excluding* any self-checksum field. **Do not put a file's full SHA-256 within the same bytes being hashed**. Keep the manifest and sidecar in **private research storage** (D31, amending v1.2), validate their equality there with the same tested code that CI runs on synthetic fixtures, and treat revisions as signed-off amendments. Never silently overwrite the frozen split.
 
 If eligibility count differs from 102, patient identity is ambiguous, or duplicate checks fail, **stop** and propose a revised split; do not force a 40/10/52 partition to make counts fit.
 
@@ -86,7 +89,7 @@ If eligibility count differs from 102, patient identity is ambiguous, or duplica
 
 - **Restricted data steward environment (local secured machine or institutional storage):** source data, all masks, alternate annotations, duplicate audit, full split, and later approved final evaluation. Only an authorized human/data-steward process holds the test unlock capability.
 - **Xavier / development training:** only the 50 canonical development images and their labels, and only after the split/audit gate passes. No test images, test labels, or alternate annotations corresponding to test cases. Avoid copying `data/second_labels/` wholesale.
-- **Public Git:** code, de-identified scan IDs where permitted, split-generation algorithm, non-sensitive manifest/checksums, summary tables, and derived visuals allowed by source license. No raw scans, private patient metadata, private credentials, large checkpoints without rights review, or unpublished restricted labels.
+- **Public Git:** code, split-generation algorithm, tests on synthetic fixtures, summary tables and derived visuals allowed by source license. **No real case identifiers, split manifests, allowed-transfer manifests or restricted hashes** (D31, amending v1.2). No raw scans, private patient metadata, private credentials, large checkpoints without rights review, or unpublished restricted labels.
 
 Instruction files and Claude hooks are **not** a security boundary. Use operating-system accounts, restricted object-storage access and transfer manifests. Verify every transfer has exactly the allowed IDs.
 
@@ -101,7 +104,7 @@ Implement as a versioned, tested, deterministic pipeline with zero dependency on
 5. Clip body-foreground MRI intensities to per-volume 1st and 99th percentiles; normalize to [0,1]. Handle empty or uniform volumes explicitly.
 6. Crop around the body bounding box; pad in-plane dimensions to a multiple of 16 and z to 32 only when the chosen OctreeNCA hierarchy actually supports this. Validate stride/level shapes, padded-voxel loss masking and memory on Xavier. Never assume model layout from prostate filenames alone.
 7. Cache preprocessed **MRI, label, body mask, spacing, affine, transform history and validity mask** in derived storage; cache *static* inputs only. Recompute Hessian features after per-sample augmentation.
-8. Provide tested inverse transforms to the original patient image grid for final 3D patient-level metrics. Confirm label interpolation stays nearest-neighbor.
+8. Provide tested inverse transforms to the original patient image grid for final 3D patient-level metrics. Confirm label interpolation stays nearest-neighbor. Whether the binary threshold is applied before or after inverse mapping is **pending** (D28).
 9. Create QC overlays for **every development scan**; Dr. Iyad approves the QC report before meaningful training.
 
 ## 5. Architecture, inputs and augmentation
@@ -169,7 +172,7 @@ Do not define 'epoch' as a fixed 200 batches without qualification. A fixed-step
 ### 7.1 Metrics
 
 - **Primary:** per-patient 3D Dice for jejunum-ileum, after mapping predictions to each patient's **original NIfTI grid**.
-- **Secondary:** HD95 in physical millimetres, with spacing-aware implementation and explicit empty-prediction handling; mean/median/SD/IQR/range and CIs across test cases.
+- **Secondary:** HD95 in physical millimetres: the larger of the two directed 95th-percentile surface distances, boundary-voxel surfaces, original-grid spacing (D27). Empty cases: Dice 1 when both prediction and reference are empty, 0 when exactly one is; HD95 not computed when either is empty and reported as a separate count (D26); mean/median/SD/IQR/range and CIs across test cases.
 - **Mechanism:** for all arms, proportion and absolute count of predicted jejunum-ileum false-positive voxels located inside true lower-GI region; for Arm D, false-negative jejunum-ileum voxels assigned to predicted lower-GI class. Record denominators and do not compare non-equivalent definitions.
 - **Efficiency:** trainable parameters, checkpoint size, GPU peak allocation and system memory (important on shared-memory Xavier), wall-clock training and inference, hardware/power mode and software versions.
 - **Visual review:** best, typical, worst and clinically unusual cases; document failure modes, not just appealing overlays.
@@ -194,10 +197,16 @@ On the exploratory Selection30: mean Dice >=0.70 supports an HPC proposal; 0.60-
 - Verify exact NVIDIA ARM64 PyTorch compatibility and OctreeNCA upstream commit/license; propose a pinned environment in `requirements-xavier.txt` / separate lockfile. No automatic firmware updates, OS flashing, destructive package changes, power-mode changes or privileged installs in this step.
 - Stage exit evidence: `reports/stage_0.md` containing redacted diagnostic output, proposed installation commands, compatibility evidence, license status and Dr. Iyad's explicit authorization for any host changes.
 
-**Stage 1 - OctreeNCA reference reproduction**
+**Stage 1A - Xavier environment and CUDA validation** (D24, approved 27 Nov 2026)
+
+- Account separation (D21) by the human administrator, separated-layout workspace verification (W2), then the core environment (D22) with a bounded CUDA smoke test and, after a passing core record, the scientific environment (D23). No agent device access, no power-mode changes, no long benchmarks.
+- Exit: `reports/stage_1a.md` with the redacted workspace check, environment records ending `result: pass`, and any deviations.
+
+**Stage 1B - OctreeNCA reference reproduction** (formerly Stage 1)
 
 - Under approved software and licensing terms, verify one forward/backward training step, memory, and a simple overfit control. Reproduce the published prostate experiment using `train_prostate2.py` if runtime and hardware permit, comparing to reported Dice ~0.8251 with a documented tolerance and protocol differences. If the full reproduction projects above 24 hours or is memory-infeasible, stop for scientific review, do not quietly substitute a different benchmark.
-- Exit: `reports/stage_1.md`, exact upstream commit, configurations, measured GPU memory/seconds per step and any replication gap.
+- Runs in the environment chosen under D18.
+- Exit: `reports/stage_1b.md`, exact upstream commit, configurations, measured GPU memory/seconds per step and any replication gap.
 
 **Stage 2 - Data integrity and pipeline**
 
@@ -325,4 +334,4 @@ data/                    # ignored; no MRI or test data in Git
 
 ---
 
-**Change control:** This v1.2 document reflects Dr. Iyad's approval of the methodological corrections described in the conversation. It is not evidence that the dataset, device, model or HPC environment has been independently verified. Deviations require an explicit decision-log entry and reviewer acknowledgment before they affect the primary experiment.
+**Change control:** This v1.2 document reflects Dr. Iyad's approval of the methodological corrections described in the conversation, with the amendments approved on 27 Nov 2026 (D24 stage split; D26, D27, D29, D30 evaluation and split definitions; D31 private split artefacts) recorded in section 2 and `docs/DECISIONS.md`. It is not evidence that the dataset, device, model or HPC environment has been independently verified. Deviations require an explicit decision-log entry and reviewer acknowledgment before they affect the primary experiment.
