@@ -1,7 +1,7 @@
 # Xavier research environment: installation proposal and dependency assessment
 
-**Status: approved by the project owner (Anas, 26 Nov 2026), conditionally: D22 after D21, W2 and a recorded D22 execution reference (the Stage 0 to Stage 1A gate passed on 27 Nov 2026: Stage 0 approved, D24 approved, D25 confirmed); D23 after a passing core record. NOT EXECUTED.** Nothing in this document has been run on the Xavier.
-Installation is proposed as **Stage 1A** (`docs/proposals/STAGE_1A_1B_SPLIT.md`), which needs Dr. Iyad's sign-off. The core and scientific environments need **separate** recorded approvals (D22, D23 in `docs/DECISIONS.md`). Both require the account separation (D21) first.
+**Status: approved by the project owner (Anas, 26 Nov 2026), conditionally: D22 after D21, W2 and a recorded D22 execution reference (the Stage 0 to Stage 1A gate passed on 26 Nov 2026 (20:16 UTC): Stage 0 approved, D24 approved, D25 confirmed); D23 after a passing core record. NOT EXECUTED.** Nothing in this document has been run on the Xavier.
+Installation belongs to **Stage 1A** (D24, approved by Dr. Iyad 26 Nov 2026 (20:16 UTC); `docs/proposals/STAGE_1A_1B_SPLIT.md`). It is run manually by the human administrator, never by an agent. The core and scientific environments need **separate** recorded approvals (D22, D23 in `docs/DECISIONS.md`). Both require the account separation (D21) first.
 **Last updated:** 26 Nov 2026 (round 3 revision) · **Script:** [`scripts/proposed/install_xavier_env.sh`](../scripts/proposed/install_xavier_env.sh) · **Locks and manifest:** [`env/xavier/`](../env/xavier/)
 
 ## 1. Target, as observed on 26 Nov 2026

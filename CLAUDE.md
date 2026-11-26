@@ -4,7 +4,7 @@
 
 ## Current authorization
 
-Only **Stage 0 (read-only Xavier hardware and toolchain inventory)** is ready to execute from this starter. Do not self-advance to install packages or train models. Stage 1-6 require their preceding stage report and reviewer gate; confirmatory HPC and test-set evaluation require a separate explicit approval.
+**Stage 0 is approved** (Dr. Iyad, 26 Nov 2026 (20:16 UTC); `docs/DECISIONS.md` D14). **Stage 1A** (Xavier environment, D24) may be prepared and executed **manually by the human administrator** within the recorded approvals (D21 to D23, D25); agents have no device access and never run privileged or installation steps. **D19** (synthetic, CPU-only parallel development) remains **blocked** until Dr. Iyad's approval is recorded, and Q3 (D28) is open, so P4 threshold and inverse-mapping code is not finalized. Do not self-advance to install packages or train models. Stages 1B to 6 require their preceding stage report and reviewer gate; confirmatory HPC and test-set evaluation require a separate explicit approval.
 
 ## Immutable research constraints
 

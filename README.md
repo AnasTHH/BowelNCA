@@ -28,9 +28,9 @@ The read-only inventory was run manually by the project owner (script commit `e2
 
 1. **Evidence.** Unapproved evidence drafts never enter this public repository; they stay in private storage until a human attests the redaction. Approved evidence goes in `reports/evidence/` with the header `REDACTED-BY-HUMAN: <initials> <YYYY-MM-DD>`. CI rejects drafts and scans approved evidence for network addresses, hostnames, home paths and key material. Raw logs stay private.
 2. **Workspace check (non-destructive):** `bash scripts/verify_workspace.sh [--layout interim|separated] [--write-test]`.
-3. **Account separation (proposed, D21):** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (administrator and research accounts, directory layout, migration procedure).
+3. **Account separation (owner-approved D21; manual execution by the administrator):** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (administrator and research accounts, directory layout, migration procedure).
 4. **Installation: Stage 1A (approved stage, D24), not yet executed.** [`docs/XAVIER_ENVIRONMENT.md`](docs/XAVIER_ENVIRONMENT.md) describes separate, versioned core and scientific venvs on the NVMe using NVIDIA's JetPack 5 PyTorch wheel and hash-locked dependencies. The script in `scripts/proposed/` refuses to run without D21 in place, recorded approval references and the reviewed commit. Approval references guard against accidental execution; they are not authentication.
-5. Obtain approval before any installation, power-mode change, firmware update, external code import or long training job.
+5. Stage 0 is approved (D14). Stage 1A runs manually within the recorded approvals; D19 remains blocked. Obtain approval before any other installation, power-mode change, firmware update, external code import or long training job.
 
 ## Explicit non-approvals
 
@@ -54,14 +54,14 @@ The read-only inventory was run manually by the project owner (script commit `e2
 | `scripts/jetson_inventory.sh` | Read-only system information collector |
 | `scripts/check_repo_policy.sh` | Public-repo policy check (no data, weights, secrets) |
 | `scripts/verify_workspace.sh` | Non-destructive Xavier workspace verification |
-| `scripts/proposed/install_xavier_env.sh` | Proposed installer (**not approved**; refuses to run without an approval token) |
+| `scripts/proposed/install_xavier_env.sh` | Stage 1A installer, run manually by the administrator; refuses to run without recorded approval references (D22/D23) and the reviewed commit |
 | `env/xavier/` | Hash-locked dependency sets for the Xavier (bootstrap, core, scientific) and the wheel manifest |
-| `docs/XAVIER_ENVIRONMENT.md` | Installation proposal and dependency assessment |
+| `docs/XAVIER_ENVIRONMENT.md` | Stage 1A installation procedure and dependency assessment |
 | `docs/XAVIER_ACCESS_AND_SECURITY.md` | Access, security and data-governance assessment |
 | `scripts/lib/workspace_checks.sh` | Shared read-only workspace and account checks |
 | `docs/proposals/STAGE_1A_1B_SPLIT.md` | Approved Stage 1A (environment) / 1B (upstream reproduction) split (D24) |
 | `tests/` | Regression tests for the inventory script, repository policy and proposed scripts (not security guarantees) |
-| `reports/stage_0.md` | Stage 0 report (pending review) |
+| `reports/stage_0.md` | Stage 0 report (approved, D14) |
 | `reports/stage_0_TEMPLATE.md` | Stage 0 evidence format |
 
 ## Publication

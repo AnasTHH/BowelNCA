@@ -12,10 +12,10 @@ The 25 Nov v1.1 source document reported 11 duplicate-image groups, 12 excluded 
 
 - Target total: 102 independent eligible cases, **only after verified**.
 - Partition: canonical 40 train, 10 development-validation, 52 final test; nested train20/train30/train40.
-- Use fixed seed 42 and documented acquisition-spacing stratification; retain exact generation algorithm and IDs.
+- Use fixed seed 42 and documented acquisition-spacing stratification (D29); retain the exact generation algorithm in Git and the IDs in private research storage.
 - Reject any duplicate group, same-patient scans, or slices crossing partitions.
 - Store manifest checksum as sidecar `splits.json.sha256` to avoid self-referential hashing.
-- The split is version-controlled, frozen and reviewed. Changes require formal amendment.
+- The split manifest, its sidecar and all real identifiers are kept **in private research storage only** (D31) and are version-controlled there, frozen and reviewed. Changes require formal amendment. Only the generation code and tests on synthetic fixtures are in this public repository.
 
 ## Selection set is not an independent validation set
 
@@ -35,7 +35,7 @@ xavier_dev/
   reports/                    # de-identified logs and quality checks
 ```
 
-Make sure data identifiers cannot be reverse-mapped to patients without authorization. Public split IDs should follow the dataset's licensing and privacy terms.
+Make sure data identifiers cannot be reverse-mapped to patients without authorization. **No real case identifiers are published** (D31): real-data split manifests, duplicate-audit identifiers, allowed-transfer manifests and restricted hashes stay in private research storage. Public reports contain only sanitized, aggregate information.
 
 ## Publication boundary
 
