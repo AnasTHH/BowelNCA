@@ -247,20 +247,35 @@ expect accept 'approved .png' "$dir"
 printf '\211PNG\r\n\032\nDATA2' > "$dir/docs/figures/f.png"; git -C "$dir" add -A
 expect reject '.png changed after approval' "$dir"; extra=$((extra + 1))
 
-# D19-R02: P1 allowlist entries (dev lock and synthetic golden digests only).
+# D19-R02: P1 allowlist entries (dev lock and synthetic golden digests only),
+# with SEC-08 strict validation of the golden JSON structure.
+g='tests/python/golden/p1_digests.json'
+H=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 for c in 'accept|env/dev/requirements-dev.in|numpy==1.24.4' \
          'accept|env/dev/requirements-dev.lock|numpy==1.24.4 --hash=sha256:00' \
-         'accept|tests/python/golden/p1_digests.json|{"synthetic": true, "digests": {}}' \
-         'reject|tests/python/golden/p1_digests.json|{"digests": {}}' \
-         'reject|tests/python/golden/p1_digests.json|{"synthetic": false, "digests": {}}' \
-         'reject|tests/python/golden/p2_digests.json|{"synthetic": true}' \
+         "accept|$g|{\"synthetic\": true, \"digests\": {}}" \
+         "accept|$g|{\"synthetic\": true, \"schema_version\": 1, \"generator\": \"p1 synthetic v1\", \"digests\": {\"tube_r4.mask\": \"$H\"}}" \
+         "reject|$g|{\"digests\": {}}" \
+         "reject|$g|{\"synthetic\": false, \"digests\": {}}" \
+         "reject|$g|{\"synthetic\": \"true\", \"digests\": {}}" \
+         "reject|$g|{\"synthetic\": 1, \"digests\": {}}" \
+         "reject|$g|{\"synthetic\": true, \"digests\": {}" \
+         "reject|$g|{\"synthetic\": true, \"synthetic\": false, \"digests\": {}}" \
+         "reject|$g|{\"synthetic\": true, \"digests\": {\"a\": \"$H\", \"a\": \"$H\"}}" \
+         "reject|$g|{\"synthetic\": true, \"digests\": {\"synthetic\": \"$H\"}}" \
+         "reject|$g|{\"synthetic\": true, \"meta\": {\"synthetic\": false}, \"digests\": {}}" \
+         "reject|$g|{\"synthetic\": true, \"digests\": {\"case01\": \"not-a-hash\"}}" \
+         "reject|$g|{\"synthetic\": true, \"digests\": {\"x\": NaN}}" \
+         "reject|$g|[{\"synthetic\": true}]" \
+         "reject|$g|# synthetic: true" \
+         'reject|tests/python/golden/p2_digests.json|{"synthetic": true, "digests": {}}' \
          'reject|tests/python/golden/case01.json|{"synthetic": true}' \
          'reject|env/dev/requirements-dev.txt|numpy' \
          'reject|env/dev/other.lock|numpy'; do
   want="${c%%|*}"; rest="${c#*|}"; path="${rest%%|*}"; content="${rest#*|}"
   dir="$work/d19r02"; new_fixture_repo "$dir"; mkdir -p "$dir/$(dirname "$path")"
   printf '%s\n' "$content" > "$dir/$path"; git -C "$dir" add -A
-  expect "$want" "D19-R02 $path ($content)" "$dir"; extra=$((extra + 1))
+  expect "$want" "D19-R02/SEC-08 $path ($content)" "$dir"; extra=$((extra + 1))
 done
 
 if [ "$fail" -ne 0 ]; then exit 1; fi

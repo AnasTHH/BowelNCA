@@ -3,13 +3,15 @@
 # commit that the destination does not already have, for every ref being
 # pushed (not only the checked-out branch):
 #   - gitleaks on each new commit's changes (redacted output);
-#   - commit messages, tag messages and author/committer identities;
+#   - commit messages and author/committer identities;
 #   - the repository policy on each new commit's full tree, including
 #     private identifiers, so content added and later removed is caught.
 # "New" is computed against the refs the destination itself reports
 # (git ls-remote), not against remote-tracking refs of any remote. It fails
 # closed when gitleaks, the private pattern file or the destination's refs
 # are unavailable, in a shallow clone, or when any Git command fails.
+# Only ordinary branch updates (refs/heads/*) to commits are allowed; tags
+# and other ref types are refused until a release policy is approved.
 # Install with scripts/install_git_hooks.sh. Defence in depth only: a hook
 # can be bypassed and does not replace review (see SECURITY.md).
 set -euo pipefail
@@ -43,15 +45,17 @@ done < "$tmp/dest_refs"
 zero='0000000000000000000000000000000000000000'
 : > "$tmp/all"
 for u in "${updates[@]}"; do
-  read -r _lref local_sha _rref _rsha <<<"$u"
-  [ "$local_sha" = "$zero" ] && continue          # deletion: nothing new is published
+  read -r _lref local_sha remote_ref _rsha <<<"$u"
+  # SEC-09: only ordinary branch updates are published in this phase. Tags,
+  # notes and any other ref type need a separately approved release policy.
+  case "$remote_ref" in
+    refs/heads/*) ;;
+    refs/tags/*) block "tag publication is not allowed until a release policy is approved" ;;
+    *) block "unsupported destination ref type; only branches (refs/heads/*) may be published" ;;
+  esac
+  [ "$local_sha" = "$zero" ] && continue          # branch deletion: nothing new is published
   type="$(git cat-file -t "$local_sha" 2>/dev/null)" || block "cannot read pushed object ${local_sha:0:12}"
-  if [ "$type" = tag ]; then                      # annotated tag: check its message too
-    git cat-file tag "$local_sha" > "$tmp/tag" || block 'cannot read tag object'
-    awk 'f{print} /^$/{f=1}' "$tmp/tag" > "$tmp/tagmsg" || block 'cannot parse tag object'
-    bash "$root/scripts/check_commit_messages.sh" --message-file "$tmp/tagmsg" </dev/null \
-      || block "tag message of ${local_sha:0:12} failed the check"
-  fi
+  [ "$type" = commit ] || block "a branch may only point to a commit (pushed object is a $type)"
   { printf '%s\n' "$local_sha"; cat "$tmp/exclude"; } > "$tmp/revs" || block 'cannot build the revision list'
   git rev-list --stdin < "$tmp/revs" >> "$tmp/all" 2>/dev/null || block 'git rev-list failed'
 done

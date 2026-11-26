@@ -223,5 +223,24 @@ if hpush "$work/shallow" origin main >/dev/null; then bad "pre-push passed in a 
 # Branch deletion publishes nothing new and passes.
 if hpush "$d4" origin --delete clean2 >/dev/null; then ok "pre-push allows a branch deletion"; else bad "pre-push blocked a branch deletion"; fi
 
+# SEC-09: only ordinary branch updates; tags and other ref types are refused.
+d6="$work/refs"; fresh_push_repo "$d6"
+nh "$d6" tag light main
+nh "$d6" tag -a -m "Release note" annotated main
+for spec in 'light' 'annotated' '--tags' 'main:refs/notes/x' 'main:refs/custom/x'; do
+  # shellcheck disable=SC2086  # spec may be an option
+  if hpush "$d6" origin $spec >/dev/null; then bad "pre-push allowed publishing $spec"; else ok "pre-push refuses to publish $spec"; fi
+done
+[ -z "$(git -C "$d6.remote.git" tag)" ] || bad "a tag reached the remote"
+nh "$d6" push -q origin light 2>/dev/null                     # placed on the remote without the hooks
+if hpush "$d6" origin :refs/tags/light >/dev/null; then bad "pre-push allowed a tag deletion"; else ok "pre-push refuses tag deletion"; fi
+tag_obj="$(git -C "$d6" rev-parse annotated)"
+if (cd "$d6" && printf 'refs/tags/annotated %s refs/heads/fromtag %040d\n' "$tag_obj" 0 \
+      | PATH="$stub_bin:$PATH" bash scripts/hooks/pre-push origin "$d6.remote.git" >/dev/null 2>&1); then
+  bad "pre-push allowed a branch pointing to a tag object"
+else ok "pre-push refuses a branch that points to a non-commit object"; fi
+printf 'b\n' > "$d6/docs/b.md"; nh "$d6" add -A; nh "$d6" commit -q -m "Branch update"
+if hpush "$d6" origin main >/dev/null; then ok "pre-push still allows an ordinary branch update"; else bad "pre-push blocked an ordinary branch update"; fi
+
 if [ "$fail" -ne 0 ]; then exit 1; fi
 printf 'PASS: commit-message checks and git hooks\n'

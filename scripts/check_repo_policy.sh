@@ -194,10 +194,17 @@ for i in "${!paths[@]}"; do
   hits="$(pc_private_hits "$blob")" || pc_die 'private pattern scan failed'
   for h in $hits; do report "private identifier (pattern #$h)" "$lbl"; done
 
-  # Golden digests must declare themselves synthetic (never real-data hashes).
+  # Golden digests: strict JSON structure (SEC-08), see
+  # scripts/lib/validate_golden_digests.py. The "synthetic" marker is a
+  # declaration, not proof of provenance; P1 regenerates digests independently.
   if [ "$f" = tests/python/golden/p1_digests.json ]; then
-    pc_grep -qaE '"synthetic"[[:space:]]*:[[:space:]]*true([[:space:]]*[,}]|[[:space:]]*$)' "$blob" \
-      || report 'golden digest file must declare "synthetic": true' "$lbl"
+    command -v python3 >/dev/null 2>&1 || pc_die 'python3 is required to validate the golden digest file'
+    rc=0; why="$(python3 -I "$script_dir/lib/validate_golden_digests.py" "$blob" 2>/dev/null)" || rc=$?
+    case "$rc" in
+      0) ;;
+      1) report "golden digest file invalid (${why:-unspecified})" "$lbl" ;;
+      *) pc_die 'golden digest validator failed' ;;
+    esac
   fi
 
   # Device evidence: only human-approved evidence in reports/evidence/, with
