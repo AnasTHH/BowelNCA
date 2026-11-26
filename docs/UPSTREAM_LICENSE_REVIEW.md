@@ -10,7 +10,7 @@ Two separate pieces of evidence are tracked. Only the second is a license that c
 
 | Evidence | Status | Detail |
 |---|---|---|
-| **A. Written author statement** | **Received 26 Nov 2026** | In reply to the 25 Nov 2026 inquiry, an upstream author (a co-author of arXiv:2508.06993) stated in writing that OctreeNCA should be considered MIT-licensed and that the missing license file will be added upstream. The correspondence is archived in private project storage and is not reproduced here |
+| **A. Written author statement** | **Received 26 Nov 2026** | In reply to the 25 Nov 2026 inquiry, an upstream author (a co-author of arXiv:2508.06993) stated in writing that OctreeNCA should be considered MIT-licensed and that the missing license file will be added upstream. The correspondence is private and is not reproduced here |
 | **B. Formal upstream LICENSE file** | **PENDING** | Re-checked 26 Nov 2026: upstream still has one commit, `70f774232305b76330a75edef9fddda8ec960cab`, with no LICENSE file. To be verified when a commit adding it appears: the license text, the copyright holder line, and that it covers the code at the commit we pin |
 
 Not yet established by either piece of evidence:
@@ -60,7 +60,7 @@ Until a license file exists upstream, the repository itself still carries **no l
 - Decision by 16 Dec 2026 (owner + Dr. Iyad, D17): proceed with upstream under the author statement for internal use, publication only after B; extend; or clean-room. Recommended: proceed with upstream, internal only, until B is verified.
 - Institutional (UoN) review of internal use: **PENDING**.
 - Permission to distribute trained weights and derivative assets: **PENDING**.
-- Evidence/response archived privately: written reply received 26 Nov 2026; archived by the project owner in private project storage (not in this repository).
+- Private archiving of the correspondence (outside this repository): **PENDING confirmation by the project owner**.
 - Dataset (Zenodo 10.5281/zenodo.13839321) license and overlay-publication rights: separate check, **PENDING**.
 
 Until evidence B is verified, keep upstream source in a **separate, pinned checkout** outside this repository (`OctreeNCA/`, `upstream/` and `third_party/` are git-ignored). Do not treat public GitHub visibility as an open-source license.
