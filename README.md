@@ -30,7 +30,7 @@ The read-only inventory was run manually by the project owner (script commit `e2
 2. **Workspace check (non-destructive):** `bash scripts/verify_workspace.sh [--layout interim|separated] [--write-test]`.
 3. **Account separation (owner-approved D21; manual execution by the administrator):** [`docs/XAVIER_ACCESS_AND_SECURITY.md`](docs/XAVIER_ACCESS_AND_SECURITY.md) (administrator and research accounts, directory layout, migration procedure).
 4. **Installation: Stage 1A (approved stage, D24), not yet executed.** [`docs/XAVIER_ENVIRONMENT.md`](docs/XAVIER_ENVIRONMENT.md) describes separate, versioned core and scientific venvs on the NVMe using NVIDIA's JetPack 5 PyTorch wheel and hash-locked dependencies. The script in `scripts/proposed/` refuses to run without D21 in place, recorded approval references and the reviewed commit. Approval references guard against accidental execution; they are not authentication.
-5. Stage 0 is approved (D14). Stage 1A runs manually within the recorded approvals; D19 remains blocked. Obtain approval before any other installation, power-mode change, firmware update, external code import or long training job.
+5. Stage 0 is approved (D14). Stage 1A runs manually within the recorded approvals. D19 (synthetic-only, CPU-only development) is approved; it authorizes no real-data access, training or paid compute. Obtain approval before any other installation, power-mode change, firmware update, external code import or long training job.
 
 ## Explicit non-approvals
 

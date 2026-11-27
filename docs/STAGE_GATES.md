@@ -1,6 +1,6 @@
 # Engineering stages, pull requests and sign-off gates
 
-Stage 0 was approved by Dr. Iyad on 26 Nov 2026 (20:16 UTC). Stage 1 is split into **1A** (Xavier environment) and **1B** (upstream reproduction), approved as D24 on 26 Nov 2026 (20:16 UTC). **Current authorization:** manual Stage 1A preparation by the human administrator is permitted within the recorded approvals (D21 to D23, D25) and the runbook constraints; agents have no device access. D19 (synthetic parallel development) remains **blocked** pending Dr. Iyad's approval. The stages below define sequencing, not blanket spending authorization.
+Stage 0 was approved by Dr. Iyad on 26 Nov 2026 (20:16 UTC). Stage 1 is split into **1A** (Xavier environment) and **1B** (upstream reproduction), approved as D24 on 26 Nov 2026 (20:16 UTC). **Current authorization:** manual Stage 1A preparation by the human administrator is permitted within the recorded approvals (D21 to D23, D25) and the runbook constraints; agents have no device access. D19 (synthetic-only, CPU-only parallel development) is approved (26 Nov 2026 (21:53 UTC)); it does not authorize real MRI access, upstream reproduction, GPU training, paid compute or privileged execution. The stages below define sequencing, not blanket spending authorization.
 
 | Stage | Suggested issue / branch | Exit evidence | Gate |
 |---|---|---|---|

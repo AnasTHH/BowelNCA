@@ -1,6 +1,6 @@
 # Stage 0 - Xavier system and compatibility report
 
-**Date (UTC):** 2026-11-26 (revision 9, documentation only: Stage 0 approved by Dr. Iyad; first drafted 2026-11-25)
+**Date (UTC):** 2026-11-26 (revision 10, documentation only: Stage 0, D19 and D28 approved by Dr. Iyad; first drafted 2026-11-25)
 **Device owner/reviewer:** Dr. Iyad Naim
 **Engineer:** Claude Code (lead implementation agent), for Anas
 **Git commit:** head of PR #2 (see PR for the exact SHA and CI run)
@@ -184,7 +184,7 @@ Details: [`docs/UPSTREAM_LICENSE_REVIEW.md`](../docs/UPSTREAM_LICENSE_REVIEW.md)
 | I3 | Privileged prerequisites, only if `--check-only` reports `python3.8-venv` or `libopenblas` missing | Not requested | Dr. Iyad |
 | B2 | OctreeNCA license | Inquiry sent, awaiting response; decision 16 Dec 2026 (D17) | Authors, then Anas and Dr. Iyad |
 | B3 | Upstream Python 3.10 vs Xavier Python 3.8 | D18 approved by the owner (separate environments) | - |
-| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 approved by the owner (26 Nov); **Dr. Iyad's approval pending** (explanation requested and provided, 26 Nov 2026 (20:16 UTC)); **blocked, not started** | Dr. Iyad (scientific approval) |
+| P | Parallel architecture-independent work, P1, P2, P4, P7, P8 (synthetic data, CPU only) | D19 approved by the owner (26 Nov) and by **Dr. Iyad (26 Nov 2026 (21:53 UTC))**; P1 starts after the approval record is merged; not started | - |
 | M | Merge PR #2 (squash) | **Engineering review accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`**; documentation head `ee60a3a` accepted by Anas (CI run 45795277612). Squash merge authorized by the owner on 26 Nov 2026; later commits are approval records only, with the engineering tree unchanged | Anas (a human merges; agents never merge their own PRs) |
 
 ### Stage 0 acceptance criteria (issue #1)
@@ -236,6 +236,7 @@ These are regression checks with substituted identities and mounts, not security
 - **Final Stage 0 engineering review (26 Nov, `87858b6`):** Technical GO for the preparatory repository changes, subject to the owner's redaction attestation (E1) and Dr. Iyad's merge authorization; **no installation authorization**. One pre-installation correction: verify installed versions with `importlib.metadata` against the manifest instead of parsing `pip freeze` (a local wheel is listed as `torch @ file:///...`). Done in `1868916`, with regression tests; `pip freeze` is kept as evidence. The independent engineering review then **accepted PR #2 at `18689161acd47ded650cc76f83fd7d5232fc1260`** with all 122 regression checks passing.
 - **Revision 8 (26 Nov, documentation only):** the owner attested the redaction (`REDACTED-BY-HUMAN: AN 2026-11-26`), so E1 is accepted and the sanitized inventory is published in `reports/evidence/`. Wording corrected: engineering preparation complete with formal acceptance pending; no further account changes after the initial authorized access setup; the wheel is a candidate compatible build pending on-device validation; D21 approval covers the manual migration by the administrator, not autonomous agent execution. No engineering changes.
 - **Revision 9 (26 Nov 2026 (20:16 UTC), documentation only):** Dr. Iyad approved Stage 0 (D14) and D24, confirmed the D25 delegation in writing, and approved Q1, Q2, Q4, Q5 and Q6 (D26, D27, D29, D30, D31). D19 and Q3 (D28) remain pending.
+- **Revision 10 (26 Nov 2026 (21:53 UTC), documentation only):** Dr. Iyad approved D19 and approved Q3 with an amendment (D28: linear probability interpolation to the original grid, then threshold for A/B or argmax for D; equivalent nnU-Net procedure after verifying its export; policy frozen before final testing). The Stage 2 data steward remains open.
 
 ## 11. Sources
 
