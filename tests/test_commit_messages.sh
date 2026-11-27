@@ -217,9 +217,13 @@ chmod 600 "$work/private/patterns.txt"
 if hpush "$d5" origin main >/dev/null; then ok "pre-push allows a clean push"; else bad "pre-push blocked a clean push"; fi
 [ "$(git -C "$d5.remote.git" rev-parse main)" = "$(git -C "$d5" rev-parse main)" ] || bad "clean push did not reach the remote"
 git clone -q --depth 1 --branch main "file://$d5.remote.git" "$work/shallow" 2>/dev/null
-git -C "$work/shallow" config user.email 'test@users.noreply.github.com'; git -C "$work/shallow" config core.hooksPath scripts/hooks
+# A clone does not inherit the source repository's local identity; set a
+# synthetic repo-local one so the fixture never depends on global Git config.
+git -C "$work/shallow" config user.name 'Test'; git -C "$work/shallow" config user.email 'test@users.noreply.github.com'
+git -C "$work/shallow" config core.hooksPath scripts/hooks
 printf 's\n' > "$work/shallow/docs/s.md"; nh "$work/shallow" add -A; nh "$work/shallow" commit -q -m "Shallow"
-if hpush "$work/shallow" origin main >/dev/null; then bad "pre-push passed in a shallow clone"; else ok "pre-push fails closed in a shallow clone"; fi
+[ "$(git -C "$work/shallow" rev-list --count HEAD)" -eq 2 ] || bad "shallow fixture commit was not created"
+if out="$(hpush "$work/shallow" origin main)"; then bad "pre-push passed in a shallow clone"; elif ! grep -q 'shallow clone' <<<"$out"; then bad "shallow clone blocked for the wrong reason"; else ok "pre-push fails closed in a shallow clone"; fi
 # Branch deletion publishes nothing new and passes.
 if hpush "$d4" origin --delete clean2 >/dev/null; then ok "pre-push allows a branch deletion"; else bad "pre-push blocked a branch deletion"; fi
 
