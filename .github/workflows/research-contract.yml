@@ -22,23 +22,26 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0, pinned commit
         with:
           persist-credentials: false
 
       - name: Shell syntax
         run: |
           set -euo pipefail
-          for f in scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh tests/*.sh; do bash -n "$f"; done
+          for f in scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh scripts/hooks/* tests/*.sh; do bash -n "$f"; done
 
       - name: ShellCheck
-        run: shellcheck -S warning scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh tests/*.sh
+        run: shellcheck -S warning scripts/*.sh scripts/lib/*.sh scripts/proposed/*.sh scripts/hooks/* tests/*.sh
 
-      - name: Repository policy (no data, weights, secrets)
-        run: bash scripts/check_repo_policy.sh
+      - name: Repository policy on the checked-out commit (no data, weights, secrets)
+        run: bash scripts/check_repo_policy.sh --tree HEAD
 
       - name: Repository policy rejects synthetic violations
         run: bash tests/test_repo_policy.sh
+
+      - name: Commit-message check and git hooks reject synthetic violations
+        run: bash tests/test_commit_messages.sh
 
       - name: Inventory regression check (not a security sandbox)
         run: bash tests/test_inventory_readonly.sh
@@ -48,3 +51,55 @@ jobs:
 
       - name: Proposed installer, smoke test and workspace verifier (stubbed, no network, no installs)
         run: bash tests/test_proposed_scripts.sh
+
+  # Secret scanning. Output is redacted and no scan report or artifact is
+  # uploaded; findings are investigated privately, never pasted into issues.
+  secret-scan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.21.2
+      GITLEAKS_SHA256: 5bc41815076e6ed6ef8fbecc9d9b75bcae31f39029ceb55da08086315316e3ba
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262  # v4.4.0, pinned commit
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks (pinned release, SHA-256 verified)
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${tarball}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$tarball" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP" gitleaks
+
+      - name: gitleaks on all fetched history and the tree (redacted)
+        run: |
+          set -euo pipefail
+          "$RUNNER_TEMP/gitleaks" git --redact --no-banner --config .gitleaks.toml --log-opts=--all .
+          "$RUNNER_TEMP/gitleaks" dir --redact --no-banner --config .gitleaks.toml .
+
+      - name: Commit messages, identities and policy for every commit in this change
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          zero=0000000000000000000000000000000000000000
+          list="$RUNNER_TEMP/commits"
+          if [ "$EVENT" = pull_request ]; then
+            git rev-list "$PR_BASE..$PR_HEAD" > "$list"
+          elif [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "$zero" ]; then
+            git rev-list "$PUSH_BEFORE..$PUSH_AFTER" > "$list"
+          else
+            git rev-list -1 "$PUSH_AFTER" > "$list"
+          fi
+          bash scripts/check_commit_messages.sh --commits "$list"
+          while IFS= read -r c; do
+            bash scripts/check_repo_policy.sh --tree "$c"
+          done < "$list"

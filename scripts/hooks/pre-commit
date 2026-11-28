@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# pre-commit hook: gitleaks on the staged changes (redacted output) and the
+# repository policy on the exact staged (index) content, never the working
+# tree, including private identifiers from the local pattern file. Fails
+# closed if gitleaks or the pattern file is missing or invalid. Install with
+# scripts/install_git_hooks.sh.
+set -euo pipefail
+[ "${BASH_VERSINFO[0]:-0}" -ge 4 ] || { echo "pre-commit: bash 4 or newer is required" >&2; exit 1; }
+root="$(git rev-parse --show-toplevel)"
+gitleaks_bin="${BOWELNCA_GITLEAKS:-gitleaks}"
+command -v "$gitleaks_bin" >/dev/null 2>&1 \
+  || { echo "pre-commit: gitleaks not found; install it (see SECURITY.md) or set BOWELNCA_GITLEAKS" >&2; exit 1; }
+"$gitleaks_bin" git --pre-commit --staged --redact --no-banner --config "$root/.gitleaks.toml" "$root"
+BOWELNCA_REQUIRE_PRIVATE_PATTERNS="${BOWELNCA_REQUIRE_PRIVATE_PATTERNS:-1}" \
+  bash "$root/scripts/check_repo_policy.sh" --index "$root"

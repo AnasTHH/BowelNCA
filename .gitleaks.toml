@@ -1,0 +1,26 @@
+# gitleaks configuration for this PUBLIC repository.
+# Extends the upstream default rules with project rules. Real private values
+# (device account names, hostnames) are NEVER listed here; they live in a
+# local pattern file outside the repository (see SECURITY.md).
+title = "BowelNCA gitleaks config"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "private-ai-assistant-link"
+description = "Private AI-assistant project, session, artifact, chat or share link"
+regex = '''claude\.ai/(?:code/)?(?:session|project|artifact|chat|share)[A-Za-z0-9_/?=&.-]*'''
+keywords = ["claude.ai"]
+
+[[rules]]
+id = "ai-session-trailer"
+description = "AI-assistant session trailer in a commit or file"
+regex = '''(?m)^Claude[-]Session:\s*\S+'''
+keywords = ["claude-session"]
+
+[[rules]]
+id = "tailscale-auth-key"
+description = "Tailscale auth or API key"
+regex = '''tskey-[A-Za-z0-9-]{10,}'''
+keywords = ["tskey-"]

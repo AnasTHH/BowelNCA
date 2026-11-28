@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# commit-msg hook: reject private AI-assistant links, session trailers,
+# secret-like strings and private identifiers in the commit message.
+# Install with scripts/install_git_hooks.sh.
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+BOWELNCA_REQUIRE_PRIVATE_PATTERNS="${BOWELNCA_REQUIRE_PRIVATE_PATTERNS:-1}" \
+  bash "$root/scripts/check_commit_messages.sh" --message-file "$1"
